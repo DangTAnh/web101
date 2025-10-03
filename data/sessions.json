@@ -27,13 +27,6 @@
     "login_time": "2025-10-03T19:32:41.516872",
     "created_at": "2025-10-03T19:32:41.516872"
   },
-  "9d41a525dbf3256dbeada0393c377aec4b3ef1c744a0ddbd882a888fd9e5a98b": {
-    "user_id": "dtanh",
-    "user_email": "dtanh@example.com",
-    "user_role": "user",
-    "login_time": "2025-10-03T20:29:26.998611",
-    "created_at": "2025-10-03T20:29:26.998611"
-  },
   "8aa5e091cb3048412c59d435decbec8b59c31a0c74eb447ba1eaa0d8f56cb87f": {
     "user_id": "test",
     "user_email": "test@example.com",
