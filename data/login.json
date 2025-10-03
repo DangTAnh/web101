@@ -1,0 +1,128 @@
+{
+  "login_history": [
+    {
+      "username": "dtanh",
+      "status": "created",
+      "timestamp": "2025-10-03T17:42:26.403933",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "dtanh",
+      "status": "success",
+      "timestamp": "2025-10-03T17:42:26.408482",
+      "ip_address": "127.0.0.1",
+      "session_token": "04408f0d821e924577f92aec0f5345e9fae9b0c43d90f5f1811094d76741df1a",
+      "email": "dtanh@example.com",
+      "role": "user"
+    },
+    {
+      "username": "dtanh",
+      "session_token": "04408f0d821e924577f92aec0f5345e9fae9b0c43d90f5f1811094d76741df1a",
+      "status": "logout",
+      "timestamp": "2025-10-03T17:42:44.686208",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "test",
+      "status": "created",
+      "timestamp": "2025-10-03T17:42:51.649273",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "test",
+      "status": "success",
+      "timestamp": "2025-10-03T17:42:51.649273",
+      "ip_address": "127.0.0.1",
+      "session_token": "d3c8bd9aafd31b21940b4512cf17d5f41602a47bfefb70ea778d735ad2be8394",
+      "email": "test@example.com",
+      "role": "user"
+    },
+    {
+      "username": "dtanh",
+      "status": "success",
+      "timestamp": "2025-10-03T17:43:11.153600",
+      "ip_address": "127.0.0.1",
+      "session_token": "246ad8399eab398bd9363f1da16ab11efbb7cf4e0fa8fb7aea5dbed2c7e06191",
+      "email": "dtanh@example.com",
+      "role": "user"
+    },
+    {
+      "username": "dtanh",
+      "status": "success",
+      "timestamp": "2025-10-03T17:58:28.117449",
+      "ip_address": "127.0.0.1",
+      "session_token": "f7ddc5c69850217e93f67243237e908750cea6afc3b89ed327fbe789fabc15b4",
+      "email": "dtanh@example.com",
+      "role": "user"
+    },
+    {
+      "username": "test",
+      "session_token": "d3c8bd9aafd31b21940b4512cf17d5f41602a47bfefb70ea778d735ad2be8394",
+      "status": "logout",
+      "timestamp": "2025-10-03T18:56:22.633722",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "dtanh",
+      "status": "failed",
+      "reason": "invalid_password",
+      "timestamp": "2025-10-03T18:56:35.043230",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "dtanh",
+      "status": "success",
+      "timestamp": "2025-10-03T18:56:40.314154",
+      "ip_address": "127.0.0.1",
+      "session_token": "af2588331956f0cd6ad09f4c2143083a966624570ac1bd98a28d582627d5e253",
+      "email": "dtanh@example.com",
+      "role": "user"
+    },
+    {
+      "username": "dtanh",
+      "session_token": "f7ddc5c69850217e93f67243237e908750cea6afc3b89ed327fbe789fabc15b4",
+      "status": "logout",
+      "timestamp": "2025-10-03T18:57:13.244352",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "test",
+      "status": "failed",
+      "reason": "invalid_password",
+      "timestamp": "2025-10-03T18:57:17.148259",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "username": "test",
+      "status": "success",
+      "timestamp": "2025-10-03T18:57:22.701890",
+      "ip_address": "127.0.0.1",
+      "session_token": "63f2d0891d8f1902ca3c6f42551316965a909c93dd26e5e005ec768464065837",
+      "email": "test@example.com",
+      "role": "user"
+    }
+  ],
+  "active_sessions": {
+    "246ad8399eab398bd9363f1da16ab11efbb7cf4e0fa8fb7aea5dbed2c7e06191": {
+      "username": "dtanh",
+      "email": "dtanh@example.com",
+      "role": "user",
+      "login_time": "2025-10-03T17:43:11.153600",
+      "ip_address": "127.0.0.1"
+    },
+    "af2588331956f0cd6ad09f4c2143083a966624570ac1bd98a28d582627d5e253": {
+      "username": "dtanh",
+      "email": "dtanh@example.com",
+      "role": "user",
+      "login_time": "2025-10-03T18:56:40.314154",
+      "ip_address": "127.0.0.1"
+    },
+    "63f2d0891d8f1902ca3c6f42551316965a909c93dd26e5e005ec768464065837": {
+      "username": "test",
+      "email": "test@example.com",
+      "role": "user",
+      "login_time": "2025-10-03T18:57:22.701890",
+      "ip_address": "127.0.0.1"
+    }
+  }
+}
