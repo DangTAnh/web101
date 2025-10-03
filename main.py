@@ -684,6 +684,10 @@ def debug_cookies():
         "remote_addr": request.remote_addr
     })
 
+@app.route('/what')
+def about():
+    return send_file('site/about.html')
+
 @app.route('/')
 def hello():
     return send_file('index.html')
@@ -695,9 +699,9 @@ FLASK_PORT = 13882
 if __name__ == '__main__':
     tunnel_process = None
     try:
-        # command = ['./cloudflared', 'tunnel', 'run']
-        # tunnel_process = subprocess.Popen(command)
-        # time.sleep(3)
+        command = ['./cloudflared', 'tunnel', 'run']
+        tunnel_process = subprocess.Popen(command)
+        time.sleep(3)
         app.run(port=FLASK_PORT, debug=False)
 
     except KeyboardInterrupt:
