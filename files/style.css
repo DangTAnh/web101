@@ -503,3 +503,18 @@ button#logout-btn {
     border-radius: 4px;
     cursor: pointer;
 }
+
+/* Mobile viewport height fix */
+@media (max-width: 600px) {
+    html, body {
+        height: 100svh;
+        min-height: 100svh;
+        max-height: 100svh;
+        overflow: hidden;
+    }
+    .messenger-container {
+        height: 100svh;
+        min-height: 100svh;
+        max-height: 100svh;
+    }
+}

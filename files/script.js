@@ -10,6 +10,7 @@ const roomInfo = document.getElementById('room-info');
 const roomnameDisplay = document.getElementById('roomname-display');
 
 let oldestMessageId = null; // To track the ID of the oldest loaded message
+let newestMessageId = null; // To track the ID of the newest loaded message
 
 if (roomInfo && roomnameDisplay) {
     fetch('/api/get-current-room', {
@@ -22,6 +23,14 @@ if (roomInfo && roomnameDisplay) {
             roomnameDisplay.textContent = data.data.room;
         }
     });
+}
+
+function newMessageElement(username, message, type) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', type ? 'outgoing' : 'incoming');
+    messageDiv.innerHTML = `<p>${escapeHTML(message)}</p>`;
+    newestMessageId = messageDiv.dataset.messageId || newestMessageId;
+    return messageDiv;
 }
 
 /**
@@ -77,9 +86,12 @@ function connectSocketIO() {
     // Connection established
     socket.on('connect', function() {
         isConnected = true;
-        
-        // Request recent messages
-        socket.emit('get_recent_messages');
+        if (newestMessageId) {
+            socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
+        }
+        if (!newestMessageId) {
+            socket.emit('get_recent_messages');
+        }
     });
 
     // Handle connection status
@@ -87,7 +99,7 @@ function connectSocketIO() {
         if (data.type === 'connected') {
             const statusMessage = document.createElement('div');
             statusMessage.classList.add('message', 'system');
-            statusMessage.innerHTML = `<p><em>🟢 ${data.message}</em></p>`;
+            statusMessage.innerHTML = `<p><em>${data.message}</em></p>`;
             messageArea.appendChild(statusMessage);
             messageArea.scrollTop = messageArea.scrollHeight;
         }
@@ -108,6 +120,7 @@ function connectSocketIO() {
                     messageArea.scrollTop = messageArea.scrollHeight;
                 }
                 playNotificationSound('/files/newmsg.mp3');
+                newestMessageId = data.id || newestMessageId;
             }
         }
     });
@@ -118,28 +131,20 @@ function connectSocketIO() {
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(function(message) {
                 if (message.type === 'message' && message.message) {
-                    if (message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username) {                        
-                        const outgoingMessage = document.createElement('div');
-                        outgoingMessage.classList.add('message', 'outgoing');
-                        outgoingMessage.innerHTML = `<p>${escapeHTML(message.message)}</p>`;
-                        messageArea.appendChild(outgoingMessage);
-                    } else {
-                        const messageDiv = document.createElement('div');
-                        messageDiv.classList.add('message', 'incoming');
-                        messageDiv.innerHTML = `<p>${escapeHTML(message.message)}</p>`;
-                        messageArea.appendChild(messageDiv);
-                    }
+                    messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
                 }
             });
             messageArea.scrollTop = messageArea.scrollHeight;
             oldestMessageId = data.messages[0].id || null;
+            newestMessageId = data.messages[data.messages.length - 1].id || null;
         }
     });
 
     // Handle message sent confirmation
     socket.on('message_sent', function(data) {
                 if (data.success) {
-                    }
+                    newestMessageId = data.id || newestMessageId;
+                }
     });
 
     // Handle errors
@@ -179,6 +184,19 @@ function connectSocketIO() {
         statusMessage.innerHTML = `<p><em>Reconnected</em></p>`;
         messageArea.appendChild(statusMessage);
         messageArea.scrollTop = messageArea.scrollHeight;
+        socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
+    });
+
+    socket.on('messages_since_reconnect', function(data) {
+        if (data.messages && data.messages.length > 0) {
+            data.messages.forEach(function(message) {
+                if (message.type === 'message' && message.message) {
+                    messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
+                }
+            });
+            playNotificationSound('/files/newmsg.mp3');
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
     });
 }
 
@@ -196,10 +214,7 @@ function loadOlderMessages(beforeMessageId) {
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(function(message) {
                 if (message.type === 'message' && message.message) {
-                    const messageDiv = document.createElement('div');
-                    messageDiv.classList.add('message', message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username ? 'outgoing' : 'incoming');
-                    messageDiv.innerHTML = `<p>${escapeHTML(message.message)}</p>`;
-                    messageArea.insertBefore(messageDiv, messageArea.firstChild);
+                    messageArea.insertBefore(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username), messageArea.firstChild);
                 }
                 //wait a bit for better UX
             });

@@ -513,7 +513,7 @@ def handle_connect():
         join_room(room_id)  # Each user has their own room
         emit('status', {
             'type': 'connected',
-            'message': 'Connected to chat server',
+            'message': 'Connected',
             'data': {'room': room_id}
         })
     except Exception as e:
@@ -623,6 +623,38 @@ def handle_get_recent_messages():
     except Exception as e:
         print(f"Error getting recent messages: {e}")
         emit('error', {'message': 'Failed to get recent messages'})
+        
+@socketio.on('get_messages_since_reconnect')
+@require_login()
+def handle_get_messages_since_reconnect(data):
+    """Get messages since last known message ID after reconnect"""
+    try:
+        print(data)
+        last_message_id = data.get('last_message_id')
+        if not last_message_id:
+            emit('error', {'message': 'last_message_id required'})
+            return
+        
+        room = get_room(session.get('user_id'))
+        recent_messages = get_recent_messages_local(room)
+
+        # Find index of the message with the given ID
+        index = next((i for i, msg in enumerate(recent_messages) if msg['id'] == last_message_id), None)
+        if index is None:
+            emit('error', {'message': 'Message ID not found'})
+            return
+
+        # Get messages since that ID
+        new_messages = recent_messages[index + 1:] if index + 1 < len(recent_messages) else []
+        
+        emit('messages_since_reconnect', {
+            'messages': new_messages,
+            'count': len(new_messages)
+        })
+    
+    except Exception as e:
+        print(f"Socket.IO get messages since reconnect error: {e}")
+        emit('error', {'message': 'Failed to get messages since reconnect'})
 
 @app.route('/login')
 def login():
@@ -650,9 +682,9 @@ FLASK_PORT = 13882
 if __name__ == '__main__':
     tunnel_process = None
     try:
-        command = ['./cloudflared', 'tunnel', 'run']
-        tunnel_process = subprocess.Popen(command)
-        time.sleep(3)
+        # command = ['./cloudflared', 'tunnel', 'run']
+        # tunnel_process = subprocess.Popen(command)
+        # time.sleep(3)
         app.run(port=FLASK_PORT, debug=False)
 
     except KeyboardInterrupt:
