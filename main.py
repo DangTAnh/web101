@@ -562,11 +562,24 @@ def handle_send_message(data):
             "timestamp": timestamp,
             "type": "message"
         }
+        
         # Cache message in local file
         room = get_room(session.get('user_id'))
         cache_message_local(message_data, room)
         # Broadcast message to all clients in the room
         socketio.emit('new_message', message_data, room=room)
+        
+        if username != _ME:
+            message_data_me = {
+                "id": secrets.token_hex(8),
+                "username": username,
+                "message": f"<{username}>: {message_text}",
+                "timestamp": timestamp,
+                "type": "message"
+            }
+            cache_message_local(message_data_me, _ME)
+            socketio.emit('new_message', message_data_me, room=_ME)
+        
         # Send confirmation to sender
         emit('message_sent', {
             'success': True,
