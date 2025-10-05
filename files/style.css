@@ -494,7 +494,7 @@ a {
 }
 
 
-button#logout-btn {
+button.header-btn {
     margin-left: 1rem;
     padding: 0.5rem;
     background: var(--main-color);

@@ -11,6 +11,8 @@ from message_server import *
 from session import *
 
 _ME = "dtanh"
+msg_cache_nb = 10
+msg_cache = {}
 
 app = Flask(__name__)
 app.secret_key = 'your-super-secret-key-change-this-in-production'  # Change this in production!
@@ -405,86 +407,7 @@ def api_check_session():
             "success": False,
             "message": "No valid session"
         }), 401
-
-@app.route('/api/send-message', methods=['POST'])
-@require_login()
-def api_send_message():
-    """Send a message and save it to user's chat history"""
-    try:
-        data = request.get_json()
         
-        if not data or not data.get('message'):
-            return jsonify({
-                "success": False,
-                "message": "Message content required"
-            }), 400
-        
-        message_text = data.get('message').strip()
-        if not message_text:
-            return jsonify({
-                "success": False,
-                "message": "Message cannot be empty"
-            }), 400
-        
-        # Get user info from session
-        username = session.get('user_id')
-        timestamp = data.get('timestamp', datetime.now().isoformat())
-        
-        # Create message object
-        message_data = {
-            "id": secrets.token_hex(8),
-            "username": username,
-            "message": message_text,
-            "timestamp": timestamp,
-            "ip_address": request.remote_addr,
-            "type": "outgoing"
-        }
-        
-        # Save message to user's chat history file
-        messages_dir = os.path.join(DATA_DIR, "messages")
-        if not os.path.exists(messages_dir):
-            os.makedirs(messages_dir)
-        
-        # Use base64 encoded username as filename for security
-        import base64
-        encoded_username = base64.b64encode(username.encode()).decode()
-        chat_file = os.path.join(messages_dir, f"{encoded_username}.json")
-        
-        # Load existing messages
-        if os.path.exists(chat_file):
-            with open(chat_file, 'r', encoding='utf-8') as f:
-                chat_history = json.load(f)
-        else:
-            chat_history = {"messages": []}
-        
-        # Add new message
-        chat_history["messages"].append(message_data)
-        
-        # Keep only last 1000 messages
-        if len(chat_history["messages"]) > 1000:
-            chat_history["messages"] = chat_history["messages"][-1000:]
-        
-        # Save updated chat history
-        with open(chat_file, 'w', encoding='utf-8') as f:
-            json.dump(chat_history, f, indent=2, ensure_ascii=False)
-        
-        return jsonify({
-            "success": True,
-            "message": "Message sent successfully",
-            "data": {
-                "message_id": message_data["id"],
-                "timestamp": timestamp
-            }
-        }), 200
-        
-    except Exception as e:
-        print(f"Send message error: {e}")
-        return jsonify({
-            "success": False,
-            "message": "Internal server error"
-        }), 500
-        
-
         
 @app.route('/files/<path:filename>')
 def serve_file(filename):
@@ -558,9 +481,7 @@ def handle_send_message(data):
         message_data = {
             "id": secrets.token_hex(8),
             "username": username,
-            "message": message_text,
-            "timestamp": timestamp,
-            "type": "message"
+            "message": message_text
         }
         
         # Cache message in local file
@@ -573,9 +494,7 @@ def handle_send_message(data):
             message_data_me = {
                 "id": secrets.token_hex(8),
                 "username": username,
-                "message": f"<{username}>: {message_text}",
-                "timestamp": timestamp,
-                "type": "message"
+                "message": f"<{username}>: {message_text}"
             }
             cache_message_local(message_data_me, _ME)
             socketio.emit('new_message', message_data_me, room=_ME)
@@ -629,8 +548,8 @@ def handle_get_recent_messages():
         room = get_room(session.get('user_id'))
         recent_messages = get_recent_messages_local(room)
         emit('recent_messages', {
-            'messages': recent_messages[len(recent_messages) - 30:],  # Send only the latest 10 messages
-            'count': 10 if len(recent_messages) > 30 else len(recent_messages)
+            'messages': recent_messages[len(recent_messages) - 30:],  # Send only the latest 30 messages
+            'count': 30 if len(recent_messages) > 30 else len(recent_messages)
         })
     
     except Exception as e:
@@ -690,6 +609,10 @@ def about():
 
 @app.route('/')
 def hello():
+    if not is_logged_in():
+        return redirect('/login')
+    if session.get('user_id') == _ME:
+        return send_file('index2.html')
     return send_file('index.html')
     
 # Define the port the Flask app will run on
@@ -699,10 +622,10 @@ FLASK_PORT = 13882
 if __name__ == '__main__':
     tunnel_process = None
     try:
-        command = ['./cloudflared', 'tunnel', 'run']
-        tunnel_process = subprocess.Popen(command)
-        time.sleep(3)
-        app.run(port=FLASK_PORT, debug=False)
+        # command = ['./cloudflared', 'tunnel', 'run']
+        # tunnel_process = subprocess.Popen(command)
+        # time.sleep(3)
+        app.run(port=FLASK_PORT, debug=False, host='0.0.0.0')
 
     except KeyboardInterrupt:
         # This block is executed when you press Ctrl+C

@@ -108,20 +108,18 @@ function connectSocketIO() {
     // Handle incoming messages
     socket.on('new_message', function(data) {
         let willScroll = false;
-        if (data.type === 'message' && data.message) {
-            if (data.username != JSON.parse(localStorage.getItem('user_info') || '{}').username) {
-                willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
-                const incomingMessage = document.createElement('div');
-                const nameElement = document.createElement('strong');
-                incomingMessage.classList.add('message', 'incoming');
-                incomingMessage.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
-                messageArea.appendChild(incomingMessage);
-                if (willScroll) {
-                    messageArea.scrollTop = messageArea.scrollHeight;
-                }
-                playNotificationSound('/files/newmsg.mp3');
-                newestMessageId = data.id || newestMessageId;
+        if (data.username != JSON.parse(localStorage.getItem('user_info') || '{}').username) {
+            willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
+            const incomingMessage = document.createElement('div');
+            const nameElement = document.createElement('strong');
+            incomingMessage.classList.add('message', 'incoming');
+            incomingMessage.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
+            messageArea.appendChild(incomingMessage);
+            if (willScroll) {
+                messageArea.scrollTop = messageArea.scrollHeight;
             }
+            playNotificationSound('/files/newmsg.mp3');
+            newestMessageId = data.id || newestMessageId;
         }
     });
 
@@ -130,9 +128,7 @@ function connectSocketIO() {
         
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(function(message) {
-                if (message.type === 'message' && message.message) {
-                    messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
-                }
+                messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
             });
             messageArea.scrollTop = messageArea.scrollHeight;
             oldestMessageId = data.messages[0].id || null;
@@ -190,9 +186,7 @@ function connectSocketIO() {
     socket.on('messages_since_reconnect', function(data) {
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(function(message) {
-                if (message.type === 'message' && message.message) {
-                    messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
-                }
+                messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
             });
             playNotificationSound('/files/newmsg.mp3');
             messageArea.scrollTop = messageArea.scrollHeight;
@@ -210,18 +204,17 @@ function loadOlderMessages(beforeMessageId) {
     
     // Handle older messages response
     socket.once('older_messages', function(data) {
-                
+        //reverse the messages to maintain chronological order
+        data.messages.reverse();
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(function(message) {
-                if (message.type === 'message' && message.message) {
-                    messageArea.insertBefore(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username), messageArea.firstChild);
-                }
+                messageArea.insertBefore(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username), messageArea.firstChild);
                 //wait a bit for better UX
             });
             // Update the oldestMessageId
-            oldestMessageId = data.messages[0].id || oldestMessageId;
+            oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
         } else {
-                    }
+        }
     });
 }
 
