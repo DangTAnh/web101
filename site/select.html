@@ -109,7 +109,7 @@
         const selectChatForm = document.getElementById('selectChatForm');
 
         // Fetch available chat rooms from the server
-        fetch('/api/chat_rooms')
+        fetch('/api/get-chat-rooms')
             .then(response => response.json())
             .then(data => {
                 data.data.rooms.forEach(room => {
@@ -132,10 +132,19 @@
             e.preventDefault();
             const selectedRoom = chatSelect.value;
             if (selectedRoom) {
-                // Redirect to the selected chat room
-                window.location.href = `/join/${selectedRoom}`;
-            } else {
-                alert('Vui lòng chọn một phòng chat.');
+                fetch('/api/join-room/' + encodeURIComponent(selectedRoom), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }).then(response => {
+                    if (response.ok) {
+                        window.location.href = '/';
+                    } else {
+                        alert('Không thể tham gia phòng chat. Vui lòng thử lại.');
+                        console.error('Error joining room:', response.statusText);
+                    }
+                });
             }
         });
     });

@@ -11,6 +11,8 @@ const roomnameDisplay = document.getElementById('roomname-display');
 
 let oldestMessageId = null; // To track the ID of the oldest loaded message
 let newestMessageId = null; // To track the ID of the newest loaded message
+let isLoadingOlderMessages = false; // Flag to prevent multiple simultaneous requests
+let scrollDebounceTimeout = null; // Timeout for debouncing scroll events
 
 if (roomInfo && roomnameDisplay) {
     fetch('/api/get-current-room', {
@@ -194,33 +196,88 @@ function connectSocketIO() {
     });
 }
 
-function loadOlderMessages(beforeMessageId) {
-    if (!beforeMessageId) {
-                return;
+function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
+    if (!beforeMessageId || isLoadingOlderMessages) {
+        return;
     }
+    
+    // Set loading flag to prevent multiple requests
+    isLoadingOlderMessages = true;
+    
     
     // Request older messages from the server
     socket.emit('get_older_messages', { before_message_id: beforeMessageId });
     
     // Handle older messages response
     socket.once('older_messages', function(data) {
-        //reverse the messages to maintain chronological order
-        data.messages.reverse();
-        if (data.messages && data.messages.length > 0) {
-            data.messages.forEach(function(message) {
-                messageArea.insertBefore(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username), messageArea.firstChild);
-                //wait a bit for better UX
-            });
-            // Update the oldestMessageId
-            oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
-        } else {
+        // Add a small delay for better UX
+        setTimeout(() => {
+            //reverse the messages to maintain chronological order
+            data.messages.reverse();
+            if (data.messages && data.messages.length > 0) {
+                data.messages.forEach(function(message) {
+                    const messageElement = newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username);
+                    messageArea.insertBefore(messageElement, messageArea.firstChild);
+                });
+                // Update the oldestMessageId
+                oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
+            }
+
+            // Remove loader and blank div with pop-out animation
+
+            if (blankDiv && blankDiv.parentNode) {
+                blankDiv.classList.add('removing');
+                setTimeout(() => {
+                    if (blankDiv.parentNode) {
+                        blankDiv.parentNode.removeChild(blankDiv);
+                    }
+                }, 200);
+            }
+
+            if (loaderDiv && loaderDiv.parentNode) {
+                loaderDiv.classList.add('pop-out');
+                setTimeout(() => {
+                    if (loaderDiv.parentNode) {
+                        loaderDiv.parentNode.removeChild(loaderDiv);
+                    }
+                }, 300); // Wait for pop-out animation to complete (0.3s)
+            }
+
+            messageArea.scrollTo({top: 40 * data.messages.length, behavior: 'auto'});
+            // Reset loading flag after processing
+            isLoadingOlderMessages = false;
+        }, 500); // Small delay for smoother animation
+    });
+
+    
+    // Also reset flag on error to prevent permanent blocking
+    socket.once('error', function(data) {
+        if (data.message && data.message.includes('older messages')) {
+            isLoadingOlderMessages = false;
+        }
+        if (blankDiv && blankDiv.parentNode) {
+            blankDiv.classList.add('removing');
+            setTimeout(() => {
+                if (blankDiv.parentNode) {
+                    blankDiv.parentNode.removeChild(blankDiv);
+                }
+            }, 200);
+        }
+
+        if (loaderDiv && loaderDiv.parentNode) {
+            loaderDiv.classList.add('pop-out');
+            setTimeout(() => {
+                if (loaderDiv.parentNode) {
+                    loaderDiv.parentNode.removeChild(loaderDiv);
+                }
+            }, 200); // Wait for pop-out animation to complete (0.2s)
         }
     });
 }
 
 function playNotificationSound(soundFilePath) {
   const audio = new Audio(soundFilePath);
-  audio.volume = 0.2; // Set volume to 20%
+  audio.volume = 0.4; // Set volume to 20%
   audio.play()
     .catch(error => {
       console.error("Error playing sound:", error);
@@ -453,11 +510,25 @@ function initializeApp() {
     }
 
     if (messageArea) {
+        
         messageArea.addEventListener('scroll', function() {
-            if (messageArea.scrollTop === 0) {
-                loadOlderMessages(oldestMessageId);
-                messageArea.scrollTop = 1; // Prevent multiple triggers
-            }
+            // Debounce the load request to handle momentum scrolling
+            scrollDebounceTimeout = setTimeout(function() {
+                if (messageArea.scrollTop <= 0) {
+                    if (!isLoadingOlderMessages && oldestMessageId) {
+                        const blankDiv = document.createElement('div');
+                        blankDiv.classList.add('message-blank');
+                        messageArea.insertBefore(blankDiv, messageArea.firstChild);
+                        const loaderDiv = document.createElement('div');
+                        loaderDiv.classList.add('loader', 'pop-in');
+                        // Slightly scroll down to show the loader
+                        messageArea.insertBefore(loaderDiv, messageArea.firstChild);
+                        const newHeight = messageArea.scrollHeight;
+                        messageArea.scrollTo({ top:  0, behavior: 'smooth'});
+                        loadOlderMessages(oldestMessageId, loaderDiv, blankDiv);
+                    }
+                }
+            }, 200);
         });
     }
     
