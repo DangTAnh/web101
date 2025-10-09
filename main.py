@@ -52,6 +52,11 @@ def change():
     """Serve the change page"""
     return app.send_static_file('site/select.html')
 
+@app.route('/what')
+def what_page():
+    """Serve the what page"""
+    return app.send_static_file('site/about.html')
+
 @app.route('/<path:filename>')
 def static_files(filename):
     """Serve static files"""
