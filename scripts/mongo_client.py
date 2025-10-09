@@ -2,7 +2,10 @@
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-uri = "mongodb+srv://admin:ta1492005@cluster0.m3kg7da.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+username = input("Enter MongoDB username: ")
+pwd = input("Enter MongoDB password: ")
+
+uri = f"mongodb+srv://{username}:{pwd}@cluster0.m3kg7da.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 class MongoDBClient:
     def __init__(self):
