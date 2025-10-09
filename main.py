@@ -102,8 +102,9 @@ def run_server():
         try:
             port = int(os.environ.get('PORT', 13882))
             print(f"Starting server on port {port}...")
-            # Use eventlet for better production performance
-            socketio.run(app, host='0.0.0.0', port=port, debug=False, async_mode='eventlet')
+            # Flask-SocketIO will auto-detect the best async mode
+            print(f"Using async mode: {socketio.async_mode}")
+            socketio.run(app, host='0.0.0.0', port=port, debug=False)
             break  # If we get here, server stopped normally
         except Exception as e:
             print(f"Server crashed: {e}")
