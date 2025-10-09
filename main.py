@@ -97,6 +97,19 @@ def on_get_messages_since_reconnect(data):
     """Get messages since last known message ID after reconnect"""
     handle_get_messages_since_reconnect(data)
 
+def run_server():
+    while True:
+        try:
+            port = int(os.environ.get('PORT', 13882))
+            print(f"Starting server on port {port}...")
+            # Use eventlet for better production performance
+            socketio.run(app, host='0.0.0.0', port=port, debug=False, async_mode='eventlet')
+            break  # If we get here, server stopped normally
+        except Exception as e:
+            print(f"Server crashed: {e}")
+            print("Restarting in 3 seconds...")
+            import time
+            time.sleep(3)
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 13882))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    run_server()
