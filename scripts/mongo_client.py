@@ -1,11 +1,18 @@
 
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import os
+from dotenv import load_dotenv
 
-username = input("Enter MongoDB username: ")
-pwd = input("Enter MongoDB password: ")
+load_dotenv()
 
-uri = f"mongodb+srv://{username}:{pwd}@cluster0.m3kg7da.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+username = os.getenv('MONGODB_USERNAME')
+password = os.getenv('MONGODB_PASSWORD')
+
+if not username or not password:
+    raise ValueError("MONGODB_USERNAME and MONGODB_PASSWORD must be set in environment variables")
+
+uri = f"mongodb+srv://{username}:{password}@cluster0.m3kg7da.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 class MongoDBClient:
     def __init__(self):
