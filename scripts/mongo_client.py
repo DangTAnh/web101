@@ -8,15 +8,22 @@ load_dotenv()
 
 username = os.getenv('MONGODB_USERNAME')
 password = os.getenv('MONGODB_PASSWORD')
+cluster = os.getenv('MONGODB_CLUSTER')
+appname = os.getenv('MONGODB_APPNAME')
 
 if not username or not password:
     raise ValueError("MONGODB_USERNAME and MONGODB_PASSWORD must be set in environment variables")
 
-uri = f"mongodb+srv://{username}:{password}@cluster0.m3kg7da.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+uri = f"mongodb+srv://{username}:{password}@{cluster}.mongodb.net/?retryWrites=true&w=majority&appName={appname}"
 
 class MongoDBClient:
     def __init__(self):
         self.client = MongoClient(uri, server_api=ServerApi('1'))
+        try:
+            self.client.admin.command('ping')
+            print("Pinged your deployment. You successfully connected to MongoDB!")
+        except Exception as e:
+            print(f"Error connecting to MongoDB: {e}")
         self.user_db = self.client["userdata"]
         self.user_collection = self.user_db["data"]
         self.sessions_collection = self.user_db["sessions"]

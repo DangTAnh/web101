@@ -2,6 +2,8 @@ from flask import Flask, redirect, session, request
 from flask_socketio import SocketIO
 from datetime import timedelta
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # Import our modules
 from scripts.auth import require_login, is_logged_in, is_me, require_dtanh
@@ -15,11 +17,11 @@ from scripts.api_routes import register_api_routes
 
 # Flask and SocketIO setup
 app = Flask(__name__, static_folder='.', static_url_path='')
-app.secret_key = 'your-super-secret-key-change-this-in-production'  # Change this in production!
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Session configuration
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_SECURE'] = True  # Ensures cookies are sent over HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevents XSS attacks
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Session expires in 7 days
