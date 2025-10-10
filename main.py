@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import our modules
-from scripts.auth import require_login, is_logged_in, is_me, require_dtanh
+from scripts.auth import require_login, is_logged_in, require_dtanh
 from scripts.user_manager import load_users
 from scripts.socket_handlers import (
     handle_connect, handle_disconnect, handle_send_message,
@@ -52,12 +52,12 @@ def login_page():
 @require_dtanh
 def change():
     """Serve the change page"""
-    return app.send_static_file('site/select.html')
+    return app.send_static_file('site/change.html')
 
 @app.route('/what')
 def what_page():
     """Serve the what page"""
-    return app.send_static_file('site/about.html')
+    return app.send_static_file('site/what.html')
 
 @app.route('/<path:filename>')
 def static_files(filename):
