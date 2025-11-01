@@ -177,13 +177,34 @@ function newMessageElement(message, isOutgoing, id = null, timestamp = null) {
     const imageUrl = message.substring(urlStart, urlEnd);
     const caption = message.substring(urlEnd + 1).trim();
 
-    let imageHTML = `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(altText)}" class="chat-image" draggable="false">`;
+    // Create loading skeleton
+    let imageHTML = `<div class="image-loading-skeleton"></div>`;
     if (caption) imageHTML += `<p>${escapeHTML(caption)}</p>`;
     messageDiv.innerHTML = imageHTML;
 
-    // Attach error handler to inline image
-    const chatImg = messageDiv.querySelector('img');
-    attachImageHandlers(chatImg);
+    // Create actual image element
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.alt = altText;
+    img.className = 'chat-image';
+    img.draggable = false;
+    img.style.display = 'none'; // Hidden until loaded
+
+    // Replace skeleton with actual image when loaded
+    img.addEventListener('load', () => {
+      const skeleton = messageDiv.querySelector('.image-loading-skeleton');
+      if (skeleton) {
+        skeleton.replaceWith(img);
+        img.style.display = 'block';
+        messageArea.scrollTop = messageArea.scrollHeight;
+      }
+    });
+
+    // Attach error handler to image
+    attachImageHandlers(img);
+
+    // Insert image after skeleton (will be replaced on load)
+    messageDiv.insertBefore(img, messageDiv.firstChild);
   } else {
     messageDiv.innerHTML = `<p>${escapeHTML(message)}</p>`;
   }
@@ -362,6 +383,7 @@ async function uploadImage() {
       }
       const messageContent = caption ? `![Image](${imageUrl})\n${caption}` : `![Image](${imageUrl})`;
       messageInputField.value = messageContent;
+      const notiDiv = document.createElement('div');
       sendMessage();
     } else {
       const errMsg = data?.message || `HTTP ${response.status}`;

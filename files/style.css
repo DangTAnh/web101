@@ -630,13 +630,20 @@ button.header-btn {
 /* Constrain images inside messages */
 .message img {
     /* constrain images inside messages to a reasonable size */
-    max-width: 320px;
-    max-height: 320px;
+    max-width: 100%;
+    max-height: 70vh;
     width: auto;
     height: auto;
     border-radius: 8px;
     display: block;
     cursor: pointer;
+}
+
+@media (min-width: 768px) {
+    .message img {
+        max-width: 320px;
+        max-height: 320px;
+    }
 }
 
 /* Placeholder when an image has been deleted or failed to load */
@@ -660,6 +667,29 @@ button.header-btn {
     font-size: 1.1rem;
     padding: 1rem 1.5rem;
     text-align: center;
+}
+
+/* Image loading skeleton */
+.image-loading-skeleton {
+    display: inline-block;
+    width: 90vw;
+    max-width: 320px;
+    height: 200px;
+    background: linear-gradient(90deg, var(--secondary-gray) 25%, var(--border-color) 50%, var(--secondary-gray) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 8px;
+}
+
+@media (min-width: 600px) {
+    .image-loading-skeleton {
+        width: 320px;
+    }
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 /* Mobile viewport height fix */
