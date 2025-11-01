@@ -101,18 +101,33 @@ def on_get_messages_since_reconnect(data):
 
 def run_server():
     while True:
+        #PRODUCTION
+        # try:
+        #     port = int(os.environ.get('PORT', 13882))
+        #     print(f"Starting server on port {port}...")
+        #     # Flask-SocketIO will auto-detect the best async mode
+        #     print(f"Using async mode: {socketio.async_mode}")
+        #     socketio.run(app, host='0.0.0.0', port=port, debug=False)
+        #     break  # If we get here, server stopped normally
+        # except Exception as e:
+        #     print(f"Server crashed: {e}")
+        #     print("Restarting in 3 seconds...")
+        #     import time
+        #     time.sleep(3)
+        #DEBUG
         try:
             port = int(os.environ.get('PORT', 13882))
             print(f"Starting server on port {port}...")
             # Flask-SocketIO will auto-detect the best async mode
             print(f"Using async mode: {socketio.async_mode}")
-            socketio.run(app, host='0.0.0.0', port=port, debug=False)
+            socketio.run(app, host='0.0.0.0', port=port, debug=True)
             break  # If we get here, server stopped normally
         except Exception as e:
             print(f"Server crashed: {e}")
             print("Restarting in 3 seconds...")
             import time
             time.sleep(3)
+        
 
 if __name__ == '__main__':
     run_server()

@@ -7,10 +7,11 @@
 body {
     --main-color: lightcoral;
     --error-color: rgba(240, 128, 128, 0.395);
-    --secondary-gray: #f0f2f5;
+    --secondary-gray: #dfd9d9;
     --border-color: #dddfe2;
     --text-primary: #050505;
     --text-secondary: #65676b;
+    --bg-secondary: #e4e6eb;
     --bg-white: #ffffff;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background-color: var(--secondary-gray);
@@ -29,6 +30,7 @@ body.dark-mode {
     --border-color: #3a3a3a;
     --text-primary: #e4e6eb;
     --text-secondary: #b0b3b8;
+    --bg-secondary: #3a3a3a;
     --bg-white: #242526;
 }
 
@@ -334,7 +336,7 @@ body.dark-mode {
     width: 13em;
     border-radius: 1rem;
     color: var(--main-color);
-    box-shadow: 0 0.4rem #dfd9d9;
+    box-shadow: 0 0.4rem var(--secondary-gray);
     cursor: pointer;
 }
 
@@ -459,9 +461,9 @@ a {
 }
 
 .dark-mode .message-input input {
-    background-color: #333333;
+    background-color: var(--bg-secondary);
     color: var(--text-primary);
-    box-shadow: 0 0.4rem #2a2a2a;
+    box-shadow: 0 0.4rem var(--secondary-gray);
 }
 
 .dark-mode .message-input input::placeholder {
@@ -504,6 +506,160 @@ button.header-btn {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+}
+
+.timestamp-popup {
+    position: absolute;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    font-size: 0.85rem;
+    z-index: 100;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    animation: fadeIn 0.3s ease forwards;
+}
+
+.timestamp-popup.removing {
+    animation: fadeOut 0.3s ease forwards;
+}
+
+@keyframes fadeOut {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.image-upload {
+    display: none;
+}
+
+.image-upload-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.2rem;
+    height: 3.2rem;
+    margin-right: 0.75rem;
+    cursor: pointer;
+    font-size: 1.3rem;
+    background-color: var(--bg-secondary);
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 0.4rem var(--secondary-gray);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.image-upload-label:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.6rem var(--border-color);
+}
+
+.image-upload-label:active {
+    transform: translateY(1px);
+    box-shadow: 0 0.2rem var(--border-color);
+}
+
+/* Image modal styles */
+.image-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.8);
+    z-index: 9999;
+}
+.image-modal-img {
+    max-width: 92vw;
+    max-height: 92vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    transition: transform 0.18s ease;
+}
+.image-modal-img {
+    touch-action: none; /* allow pointer events to handle pinch/drag */
+    cursor: grab;
+    /* Hint to the browser to optimize transforms for this element */
+    will-change: transform;
+    backface-visibility: hidden;
+    transform-origin: 0 0; /* transform math in JS assumes origin at top-left */
+    -webkit-user-drag: none; /* prevent iOS Safari drag ghost */
+}
+.image-modal-img:active { cursor: grabbing; }
+.image-modal-close {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.image-modal-close:hover { background: rgba(0,0,0,0.7); }
+
+/* Constrain images inside messages */
+.message img {
+    /* constrain images inside messages to a reasonable size */
+    max-width: 320px;
+    max-height: 320px;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+    cursor: pointer;
+}
+
+/* Placeholder when an image has been deleted or failed to load */
+.chat-image-deleted {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 320px;
+    height: 200px;
+    background: var(--secondary-gray);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+}
+
+.image-modal .modal-image-deleted {
+    color: #fff;
+    background: transparent;
+    font-size: 1.1rem;
+    padding: 1rem 1.5rem;
+    text-align: center;
 }
 
 /* Mobile viewport height fix */

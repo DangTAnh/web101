@@ -1,4 +1,14 @@
-// Get references to the HTML elements we'll be interacting with
+// ============================================================================
+// Chat Application - Refactored & Clean
+// ============================================================================
+// Organized in logical sections: State, Helpers, UI Components, Socket.IO,
+// Event Wiring, and App Init. Same behavior as original; improved readability.
+
+// ============================================================================
+// STATE & ELEMENTS
+// ============================================================================
+
+// DOM references
 const messageArea = document.getElementById('message-area');
 const messageInputField = document.getElementById('message-input-field');
 const sendButton = document.getElementById('send-button');
@@ -8,553 +18,852 @@ const usernameDisplay = document.getElementById('username-display');
 const logoutBtn = document.getElementById('logout-btn');
 const roomInfo = document.getElementById('room-info');
 const roomnameDisplay = document.getElementById('roomname-display');
+const imageUploadInput = document.getElementById('image-upload');
 
-let oldestMessageId = null; // To track the ID of the oldest loaded message
-let newestMessageId = null; // To track the ID of the newest loaded message
-let isLoadingOlderMessages = false; // Flag to prevent multiple simultaneous requests
-let scrollDebounceTimeout = null; // Timeout for debouncing scroll events
+// Message state
+let oldestMessageId = null;
+let newestMessageId = null;
+let isLoadingOlderMessages = false;
+let scrollDebounceTimeout = null;
 
-if (roomInfo && roomnameDisplay) {
-    fetch('/api/get-current-room', {
-        method: 'GET',
-        credentials: 'same-origin'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success && data.data) {
-            roomnameDisplay.textContent = data.data.room;
-        }
-    });
+// Socket state
+let socket = null;
+let isConnected = false;
+
+// ============================================================================
+// UTILITIES & HELPERS
+// ============================================================================
+
+function escapeHTML(str = '') {
+  return String(str).replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[m]);
 }
 
-function newMessageElement(username, message, type) {
-    const messageDiv = document.createElement('div');
-    messageDiv.classList.add('message', type ? 'outgoing' : 'incoming');
-    messageDiv.innerHTML = `<p>${escapeHTML(message)}</p>`;
-    newestMessageId = messageDiv.dataset.messageId || newestMessageId;
-    return messageDiv;
+function isTouchDevice() {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 }
-
-/**
- * Creates and appends a new message to the chat window.
- */
-
-// function loadMessages() {
-//     // Fetch recent messages from the server
-//     fetch('/api/get-chat-history', {
-//         method: 'GET',
-//         credentials: 'same-origin'
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//         if (data.success && data.messages) {
-//             data.messages.forEach(message => {
-//                 const messageDiv = document.createElement('div');
-//                 messageDiv.classList.add('message', message.type === 'outgoing' ? 'outgoing' : 'incoming');
-//                 messageDiv.innerHTML = `<p><strong>${escapeHTML(message.username)}:</strong> ${escapeHTML(message.message)}</p>`;
-//                 messageArea.appendChild(messageDiv);
-//             });
-//             messageArea.scrollTop = messageArea.scrollHeight;
-//         }
-//     })
-//     .catch(error => {
-//         console.error('Error fetching messages:', error);
-//     });
-// }
-
-// if (messageArea) {
-//     loadMessages();
-//     messageArea.scrollTop = messageArea.scrollHeight;
-// }
 
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
+  return parts.length === 2 ? parts.pop().split(';').shift() : null;
 }
 
-function switch_theme() {
-    if (!switchThemeToggle) return;
-    document.body.classList.toggle('dark-mode');
+// ============================================================================
+// TIMESTAMP POPUP (HOVER + CLICK FALLBACK)
+// ============================================================================
+
+function showTimestampPopup(messageDiv) {
+  const ts = messageDiv?.dataset?.timestamp;
+  if (!ts) return;
+
+  const date = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatted = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+  // Remove existing popup
+  const existing = document.getElementById('timestamp-popup');
+  if (existing) existing.remove();
+
+  // Create popup
+  const popup = document.createElement('div');
+  popup.id = 'timestamp-popup';
+  popup.classList.add('timestamp-popup');
+  popup.innerHTML = `<p>${formatted}</p>`;
+  document.body.appendChild(popup);
+
+  // Position near message
+  const rect = messageDiv.getBoundingClientRect();
+  popup.style.top = `${rect.bottom + window.scrollY}px`;
+  popup.style.left = `${rect.left + window.scrollX}px`;
+
+  requestAnimationFrame(() => {
+    const pRect = popup.getBoundingClientRect();
+    let left = rect.left + window.scrollX + (rect.width - pRect.width) / 2;
+    left = Math.max(8 + window.scrollX, Math.min(left, window.scrollX + document.documentElement.clientWidth - pRect.width - 8));
+    let top = rect.top + window.scrollY - pRect.height - 8;
+    if (top < window.scrollY + 8) top = rect.bottom + window.scrollY + 8;
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+    popup.style.opacity = '1';
+  });
+
+  // Remove on next click
+  function removePopup() {
+    popup.classList.add('removing');
+    setTimeout(() => popup.remove(), 300);
+    document.removeEventListener('click', removePopup);
+  }
+  setTimeout(() => document.addEventListener('click', removePopup), 0);
 }
 
-let socket = null;
-let isConnected = false;
+function attachTimestampListeners(messageDiv) {
+  if (!messageDiv) return;
+  let hoverTimer = null;
 
-function connectSocketIO() {
-    // Initialize Socket.IO connection
-    socket = io();
+  // Hover: show popup after 2s (non-touch only)
+  messageDiv.addEventListener('mouseenter', () => {
+    if (isTouchDevice()) return;
+    hoverTimer = setTimeout(() => {
+      showTimestampPopup(messageDiv);
+      hoverTimer = null;
+    }, 2000);
+  });
 
-    // Connection established
-    socket.on('connect', function() {
-        isConnected = true;
-        if (newestMessageId) {
-            socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
-        }
-        if (!newestMessageId) {
-            socket.emit('get_recent_messages');
-        }
-    });
+  // Mouseleave: cancel timer and hide popup
+  messageDiv.addEventListener('mouseleave', () => {
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+    const existing = document.getElementById('timestamp-popup');
+    if (existing) {
+      existing.classList.add('removing');
+      setTimeout(() => existing.remove(), 300);
+    }
+  });
 
-    // Handle connection status
-    socket.on('status', function(data) {
-        if (data.type === 'connected') {
-            const statusMessage = document.createElement('div');
-            statusMessage.classList.add('message', 'system');
-            statusMessage.innerHTML = `<p><em>${data.message}</em></p>`;
-            messageArea.appendChild(statusMessage);
-            messageArea.scrollTop = messageArea.scrollHeight;
-        }
-    });
-
-    // Handle incoming messages
-    socket.on('new_message', function(data) {
-        let willScroll = false;
-        if (data.username != JSON.parse(localStorage.getItem('user_info') || '{}').username) {
-            willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
-            const incomingMessage = document.createElement('div');
-            const nameElement = document.createElement('strong');
-            incomingMessage.classList.add('message', 'incoming');
-            incomingMessage.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
-            messageArea.appendChild(incomingMessage);
-            if (willScroll) {
-                messageArea.scrollTop = messageArea.scrollHeight;
-            }
-            playNotificationSound('/files/newmsg.mp3');
-            newestMessageId = data.id || newestMessageId;
-        }
-    });
-
-    // Handle recent messages
-    socket.on('recent_messages', function(data) {
-        
-        if (data.messages && data.messages.length > 0) {
-            data.messages.forEach(function(message) {
-                messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
-            });
-            messageArea.scrollTop = messageArea.scrollHeight;
-            oldestMessageId = data.messages[0].id || null;
-            newestMessageId = data.messages[data.messages.length - 1].id || null;
-        }
-    });
-
-    // Handle message sent confirmation
-    socket.on('message_sent', function(data) {
-                if (data.success) {
-                    newestMessageId = data.id || newestMessageId;
-                }
-    });
-
-    // Handle errors
-    socket.on('error', function(data) {
-        console.error('Socket.IO Error:', data);
-        const errorMessage = document.createElement('div');
-        errorMessage.classList.add('message', 'system', 'error');
-        errorMessage.innerHTML = `<p><em>❌ ${data.message}</em></p>`;
-        messageArea.appendChild(errorMessage);
-        messageArea.scrollTop = messageArea.scrollHeight;
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', function(reason) {
-        isConnected = false;
-                
-        const statusMessage = document.createElement('div');
-        statusMessage.classList.add('message', 'system', 'error');
-        statusMessage.innerHTML = `<p><em>Disconnected</em></p>`;
-        messageArea.appendChild(statusMessage);
-        messageArea.scrollTop = messageArea.scrollHeight;
-        
-        // Attempt to reconnect after a delay
-        setTimeout(function() {
-            if (!isConnected) {
-                                socket.connect();
-            }
-        }, 5000);
-    });
-
-    // Handle reconnection
-    socket.on('reconnect', function() {
-        isConnected = true;
-                
-        const statusMessage = document.createElement('div');
-        statusMessage.classList.add('message', 'system');
-        statusMessage.innerHTML = `<p><em>Reconnected</em></p>`;
-        messageArea.appendChild(statusMessage);
-        messageArea.scrollTop = messageArea.scrollHeight;
-        socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
-    });
-
-    socket.on('messages_since_reconnect', function(data) {
-        if (data.messages && data.messages.length > 0) {
-            data.messages.forEach(function(message) {
-                messageArea.appendChild(newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username));
-            });
-            playNotificationSound('/files/newmsg.mp3');
-            messageArea.scrollTop = messageArea.scrollHeight;
-        }
-    });
+  // Click fallback on touch devices
+  if (isTouchDevice()) {
+    messageDiv.addEventListener('click', (e) => showTimestampPopup(e.currentTarget));
+  }
 }
+
+// ============================================================================
+// IMAGE HELPERS
+// ============================================================================
+
+async function handleChatImageError(img) {
+  try {
+    const res = await fetch(img.src, { method: 'HEAD', credentials: 'same-origin' });
+    const placeholder = document.createElement('div');
+    placeholder.className = 'chat-image-deleted';
+    placeholder.textContent = res.status === 404 ? 'Image deleted' : 'Image not available';
+    img.replaceWith(placeholder);
+  } catch (err) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'chat-image-deleted';
+    placeholder.textContent = 'Image not available';
+    img.replaceWith(placeholder);
+  }
+}
+
+function attachImageHandlers(img) {
+  if (!img) return;
+  img.addEventListener('error', () => handleChatImageError(img));
+  img.addEventListener('dragstart', (e) => e.preventDefault());
+  // Scroll down when image loads
+  img.addEventListener('load', () => {
+    messageArea.scrollTop = messageArea.scrollHeight;
+  });
+}
+
+// ============================================================================
+// MESSAGE ELEMENT BUILDER
+// ============================================================================
+
+function newMessageElement(message, isOutgoing, id = null, timestamp = null) {
+  const messageDiv = document.createElement('div');
+  messageDiv.classList.add('message', isOutgoing ? 'outgoing' : 'incoming');
+
+  // Check if message is markdown image: ![alt](url)
+  if (message.startsWith('![') && message.includes('](') && message.endsWith(')')) {
+    const altStart = message.indexOf('![') + 2;
+    const altEnd = message.indexOf(']', altStart);
+    const urlStart = message.indexOf('](', altEnd) + 2;
+    const urlEnd = message.indexOf(')', urlStart);
+    const altText = message.substring(altStart, altEnd);
+    const imageUrl = message.substring(urlStart, urlEnd);
+    const caption = message.substring(urlEnd + 1).trim();
+
+    let imageHTML = `<img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(altText)}" class="chat-image" draggable="false">`;
+    if (caption) imageHTML += `<p>${escapeHTML(caption)}</p>`;
+    messageDiv.innerHTML = imageHTML;
+
+    // Attach error handler to inline image
+    const chatImg = messageDiv.querySelector('img');
+    attachImageHandlers(chatImg);
+  } else {
+    messageDiv.innerHTML = `<p>${escapeHTML(message)}</p>`;
+  }
+
+  // Attach metadata
+  if (id) messageDiv.dataset.messageId = id;
+  if (timestamp) messageDiv.dataset.timestamp = timestamp;
+
+  // Track newest message ID
+  newestMessageId = id || messageDiv.dataset.messageId || newestMessageId;
+
+  // Attach timestamp listener (hover + click fallback)
+  attachTimestampListeners(messageDiv);
+
+  return messageDiv;
+}
+
+// ============================================================================
+// OLDER MESSAGES LOADER (PULL-TO-REFRESH)
+// ============================================================================
 
 function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
-    if (!beforeMessageId || isLoadingOlderMessages) {
-        return;
+  if (!beforeMessageId || isLoadingOlderMessages) return;
+
+  isLoadingOlderMessages = true;
+  socket.emit('get_older_messages', { before_message_id: beforeMessageId });
+
+  socket.once('older_messages', function(data) {
+    setTimeout(() => {
+      data.messages.reverse();
+      if (data.messages?.length > 0) {
+        data.messages.forEach((message) => {
+          const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+          const messageElement = newMessageElement(
+            message.message,
+            message.username === currentUser,
+            message.id,
+            message.timestamp
+          );
+          messageArea.insertBefore(messageElement, messageArea.firstChild);
+        });
+        oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
+      }
+
+      // Remove loaders with animation
+      if (blankDiv?.parentNode) {
+        blankDiv.classList.add('removing');
+        setTimeout(() => blankDiv.parentNode?.removeChild(blankDiv), 200);
+      }
+      if (loaderDiv?.parentNode) {
+        loaderDiv.classList.add('pop-out');
+        setTimeout(() => loaderDiv.parentNode?.removeChild(loaderDiv), 300);
+      }
+
+      messageArea.scrollTo({ top: 40 * data.messages.length, behavior: 'auto' });
+      isLoadingOlderMessages = false;
+    }, 500);
+  });
+
+  socket.once('error', function(data) {
+    if (data.message?.includes('older messages')) isLoadingOlderMessages = false;
+    if (blankDiv?.parentNode) {
+      blankDiv.classList.add('removing');
+      setTimeout(() => blankDiv.parentNode?.removeChild(blankDiv), 200);
     }
-    
-    // Set loading flag to prevent multiple requests
-    isLoadingOlderMessages = true;
-    
-    
-    // Request older messages from the server
-    socket.emit('get_older_messages', { before_message_id: beforeMessageId });
-    
-    // Handle older messages response
-    socket.once('older_messages', function(data) {
-        // Add a small delay for better UX
-        setTimeout(() => {
-            //reverse the messages to maintain chronological order
-            data.messages.reverse();
-            if (data.messages && data.messages.length > 0) {
-                data.messages.forEach(function(message) {
-                    const messageElement = newMessageElement(message.username, message.message, message.username === JSON.parse(localStorage.getItem('user_info') || '{}').username);
-                    messageArea.insertBefore(messageElement, messageArea.firstChild);
-                });
-                // Update the oldestMessageId
-                oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
-            }
-
-            // Remove loader and blank div with pop-out animation
-
-            if (blankDiv && blankDiv.parentNode) {
-                blankDiv.classList.add('removing');
-                setTimeout(() => {
-                    if (blankDiv.parentNode) {
-                        blankDiv.parentNode.removeChild(blankDiv);
-                    }
-                }, 200);
-            }
-
-            if (loaderDiv && loaderDiv.parentNode) {
-                loaderDiv.classList.add('pop-out');
-                setTimeout(() => {
-                    if (loaderDiv.parentNode) {
-                        loaderDiv.parentNode.removeChild(loaderDiv);
-                    }
-                }, 300); // Wait for pop-out animation to complete (0.3s)
-            }
-
-            messageArea.scrollTo({top: 40 * data.messages.length, behavior: 'auto'});
-            // Reset loading flag after processing
-            isLoadingOlderMessages = false;
-        }, 500); // Small delay for smoother animation
-    });
-
-    
-    // Also reset flag on error to prevent permanent blocking
-    socket.once('error', function(data) {
-        if (data.message && data.message.includes('older messages')) {
-            isLoadingOlderMessages = false;
-        }
-        if (blankDiv && blankDiv.parentNode) {
-            blankDiv.classList.add('removing');
-            setTimeout(() => {
-                if (blankDiv.parentNode) {
-                    blankDiv.parentNode.removeChild(blankDiv);
-                }
-            }, 200);
-        }
-
-        if (loaderDiv && loaderDiv.parentNode) {
-            loaderDiv.classList.add('pop-out');
-            setTimeout(() => {
-                if (loaderDiv.parentNode) {
-                    loaderDiv.parentNode.removeChild(loaderDiv);
-                }
-            }, 200); // Wait for pop-out animation to complete (0.2s)
-        }
-    });
+    if (loaderDiv?.parentNode) {
+      loaderDiv.classList.add('pop-out');
+      setTimeout(() => loaderDiv.parentNode?.removeChild(loaderDiv), 200);
+    }
+  });
 }
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
 
 function playNotificationSound(soundFilePath) {
-  const audio = new Audio(soundFilePath);
-  audio.volume = 0.4; // Set volume to 20%
-  audio.play()
-    .catch(error => {
-      console.error("Error playing sound:", error);
-    });
+  try {
+    const audio = new Audio(soundFilePath);
+    audio.volume = 0.4;
+    audio.play().catch(() => {});
+  } catch (e) {
+    console.error('playNotificationSound', e);
+  }
 }
+
+// ============================================================================
+// SEND MESSAGE
+// ============================================================================
 
 function sendMessage() {
-    const messageText = messageInputField.value.trim();
+  const messageText = messageInputField.value.trim();
+  if (!messageText) return;
+  if (!socket || !isConnected) {
+    console.error('Socket.IO not connected');
+    return;
+  }
 
-    // Don't send empty messages
-    if (messageText === '') {
-        return; 
-    }
+  const nowTs = new Date().toISOString();
+  const outgoingMessage = newMessageElement(messageText, true, '', nowTs);
+  messageArea.appendChild(outgoingMessage);
+  messageInputField.value = '';
+  messageArea.scrollTop = messageArea.scrollHeight;
 
-    // Check if Socket.IO is connected
-    if (!socket || !isConnected) {
-        console.error('Socket.IO not connected');
-        return;
-    }
+  const userInfoStored = JSON.parse(localStorage.getItem('user_info') || '{}');
+  const username = userInfoStored.username || prompt('Enter your username:') || 'Anonymous';
 
-    // Create a new message element for the outgoing message
-    const outgoingMessage = document.createElement('div');
-    outgoingMessage.classList.add('message', 'outgoing');
-    outgoingMessage.innerHTML = `<p>${escapeHTML(messageText)}</p>`;
-    messageArea.appendChild(outgoingMessage);
+  socket.emit('send_message', {
+    message: messageText,
+    username,
+    timestamp: new Date().toISOString()
+  });
 
-    // Clear the input field after sending
-    messageInputField.value = '';
+  const sendTimeout = setTimeout(() => {
+    outgoingMessage.classList.add('message-failed');
+  }, 4000);
 
-    // Scroll to the latest message
-    messageArea.scrollTop = messageArea.scrollHeight;
-
-    // Get username from stored user info or prompt
-    const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
-    const username = userInfo.username || prompt('Enter your username:') || 'Anonymous';
-
-    // Send the message via Socket.IO
-    socket.emit('send_message', {
-        message: messageText,
-        username: username,
-        timestamp: new Date().toISOString()
-    });
-
-    // Handle potential send failures (add timeout)
-    const sendTimeout = setTimeout(() => {
-        console.error('Message send timeout');
-        outgoingMessage.classList.add('message-failed');
-    }, 4000);
-
-    // Clear timeout when message is confirmed sent
-    const originalHandler = socket._callbacks['$message_sent'];
-    socket.once('message_sent', function(data) {
-        clearTimeout(sendTimeout);
-        if (data.success) {
-                        // Remove any failed styling
-            outgoingMessage.classList.remove('message-failed');
-        } else {
-            console.error('Failed to send message:', data);
-            outgoingMessage.classList.add('message-failed');
-        }
-    });
-}
-
-/**
- * A helper function to prevent basic HTML injection.
- */
-function escapeHTML(str) {
-    return str.replace(/[&<>"']/g, function(match) {
-        return {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        }[match];
-    });
-}
-
-
-// --- Event Listeners ---
-
-// Send message when the send button is clicked
-sendButton.addEventListener('click', sendMessage);
-// Send message when the 'Enter' key is pressed in the input field
-messageInputField.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-        event.preventDefault(); // Prevents a new line from being added to the input
-        sendMessage();
-    }
-});
-
-// Check if user is logged in
-async function checkSession() {
-    try {
-        const response = await fetch('/api/check-session', {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // User is logged in, show user info
-            if (userInfo && usernameDisplay) {
-                userInfo.style.display = 'block';
-                usernameDisplay.textContent = `${data.data.username}`;
-            }
-            return true;
-        } else {
-            // User not logged in, redirect to login
-            window.location.href = '/login';
-            return false;
-        }
-    } catch (error) {
-        console.error('Session check failed:', error);
-        window.location.href = '/login';
-        return false;
-    }
-}
-
-
-// Function to clear all cookies (client-side cleanup)
-function clearAllCookies() {
-    // Get all cookies
-    const cookies = document.cookie.split(";");
-    
-    // Clear each cookie
-    for (let cookie of cookies) {
-        const eqPos = cookie.indexOf("=");
-        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
-        
-        // Clear cookie with different path combinations
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-    }
-}
-
-// Logout function
-async function logout() {
-    try {
-                
-        // First, call server logout API  
-        const response = await fetch('/api/logout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            credentials: 'same-origin' // Include session cookies
-        });
-        
-        const data = await response.json();
-        
-        // Clear client-side data regardless of server response
-        localStorage.removeItem('user_info');
-        localStorage.removeItem('session_token');
-        sessionStorage.clear();
-        
-        // Clear all cookies from client side
-        clearAllCookies();
-        
-                
-        if (data.success) {
-                    } else {
-            console.warn('Logout error from server, but local session cleared:', data.message);
-        }
-        
-        // Redirect to login page
-        window.location.href = '/login';
-        
-    } catch (error) {
-        // Even if server call fails, clear local data
-        localStorage.clear();
-        sessionStorage.clear();
-        clearAllCookies();
-        
-        console.error('Logout failed:', error);
-        window.location.href = '/login';
-    }
-}
-
-// Connect the theme toggle to the switch function
-if (switchThemeToggle) {
-    // Initialize theme based on saved preference
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    if (savedTheme === 'dark') {
-        document.body.classList.add('dark-mode');
-        switchThemeToggle.checked = false;
+  socket.once('message_sent', function(data) {
+    clearTimeout(sendTimeout);
+    if (data.success) {
+      outgoingMessage.classList.remove('message-failed');
+      if (data.id) outgoingMessage.dataset.messageId = data.id;
     } else {
-        document.body.classList.remove('dark-mode');
-        switchThemeToggle.checked = true;
+      console.error('Failed to send message:', data);
+      outgoingMessage.classList.add('message-failed');
     }
+  });
+}
 
-    // Save theme preference on toggle
-    switchThemeToggle.addEventListener('change', () => {
-        if (switchThemeToggle.checked) {
-            document.body.classList.remove('dark-mode');
-            localStorage.setItem('theme', 'light');
-        } else {
-            document.body.classList.add('dark-mode');
-            localStorage.setItem('theme', 'dark');
-        }
+// ============================================================================
+// UPLOAD IMAGE
+// ============================================================================
+
+async function uploadImage() {
+  const file = imageUploadInput.files[0];
+  if (!file) {
+    alert('Please select an image to upload.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const response = await fetch('/api/upload-image', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin'
     });
+
+    const raw = await response.text();
+    let data = null;
+
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      console.warn('Upload: response not JSON, raw=', raw);
+      const trimmed = raw?.trim().replace(/^"|"$/g, '') || '';
+      const isLikelyId = /^[a-fA-F0-9]{20,64}$/.test(trimmed) || (trimmed.length > 0 && trimmed.length < 200);
+      if (response.ok && isLikelyId) {
+        const imageUrl = `/api/images/${encodeURIComponent(trimmed)}`;
+        data = { success: true, data: { image_url: imageUrl } };
+      } else {
+        console.error('Upload: response invalid', { status: response.status, raw });
+        alert('Image upload failed: server returned an unexpected response.');
+        return;
+      }
+    }
+
+    if (response.ok && data?.success) {
+      const imageUrl = data.data?.image_url || data.image_url || data.url;
+      const caption = data.data?.message || data.message || '';
+      if (!imageUrl) {
+        alert('Image uploaded but server did not return a URL.');
+        return;
+      }
+      const messageContent = caption ? `![Image](${imageUrl})\n${caption}` : `![Image](${imageUrl})`;
+      messageInputField.value = messageContent;
+      sendMessage();
+    } else {
+      const errMsg = data?.message || `HTTP ${response.status}`;
+      alert(`Image upload failed: ${errMsg}`);
+    }
+  } catch (error) {
+    console.error('uploadImage', error);
+    alert('An error occurred while uploading the image.');
+  }
 }
 
-// Connect logout button
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', logout);
+// ============================================================================
+// SOCKET.IO SETUP
+// ============================================================================
+
+function connectSocketIO() {
+  socket = io();
+
+  socket.on('connect', function() {
+    isConnected = true;
+    if (newestMessageId) {
+      socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
+    } else {
+      socket.emit('get_recent_messages');
+    }
+  });
+
+  socket.on('status', function(data) {
+    if (data.type === 'connected') {
+      const statusMessage = document.createElement('div');
+      statusMessage.classList.add('message', 'system');
+      statusMessage.innerHTML = `<p><em>${data.message}</em></p>`;
+      messageArea.appendChild(statusMessage);
+      messageArea.scrollTop = messageArea.scrollHeight;
+    }
+  });
+
+  socket.on('new_message', function(data) {
+    const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+    if (data.username !== currentUser) {
+      const willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
+      const incomingMessage = document.createElement('div');
+      incomingMessage.classList.add('message', 'incoming');
+      incomingMessage.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
+      if (data.id) incomingMessage.dataset.messageId = data.id;
+      if (data.timestamp) incomingMessage.dataset.timestamp = data.timestamp;
+      messageArea.appendChild(incomingMessage);
+      if (willScroll) messageArea.scrollTop = messageArea.scrollHeight;
+      playNotificationSound('/files/newmsg.mp3');
+      newestMessageId = data.id || newestMessageId;
+    }
+  });
+
+  socket.on('recent_messages', function(data) {
+    if (data.messages?.length > 0) {
+      const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+      data.messages.forEach((message) => {
+        messageArea.appendChild(newMessageElement(
+          message.message,
+          message.username === currentUser,
+          message.id,
+          message.timestamp
+        ));
+      });
+      messageArea.scrollTop = messageArea.scrollHeight;
+      oldestMessageId = data.messages[0].id || null;
+      newestMessageId = data.messages[data.messages.length - 1].id || null;
+    }
+  });
+
+  socket.on('message_sent', function(data) {
+    if (data.success) newestMessageId = data.id || newestMessageId;
+  });
+
+  socket.on('error', function(data) {
+    console.error('Socket.IO Error:', data);
+    const errorMessage = document.createElement('div');
+    errorMessage.classList.add('message', 'system', 'error');
+    errorMessage.innerHTML = `<p><em>❌ ${escapeHTML(data.message || 'Error')}</em></p>`;
+    messageArea.appendChild(errorMessage);
+    messageArea.scrollTop = messageArea.scrollHeight;
+  });
+
+  socket.on('disconnect', function(reason) {
+    isConnected = false;
+    const statusMessage = document.createElement('div');
+    statusMessage.classList.add('message', 'system', 'error');
+    statusMessage.innerHTML = `<p><em>Disconnected</em></p>`;
+    messageArea.appendChild(statusMessage);
+    messageArea.scrollTop = messageArea.scrollHeight;
+    setTimeout(() => {
+      if (!isConnected) socket.connect();
+    }, 5000);
+  });
+
+  socket.on('reconnect', function() {
+    isConnected = true;
+    const statusMessage = document.createElement('div');
+    statusMessage.classList.add('message', 'system');
+    statusMessage.innerHTML = `<p><em>Reconnected</em></p>`;
+    messageArea.appendChild(statusMessage);
+    messageArea.scrollTop = messageArea.scrollHeight;
+    socket.emit('get_messages_since_reconnect', { last_message_id: newestMessageId });
+  });
+
+  socket.on('messages_since_reconnect', function(data) {
+    if (data.messages?.length > 0) {
+      const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+      data.messages.forEach((message) => {
+        messageArea.appendChild(newMessageElement(
+          message.message,
+          message.username === currentUser,
+          message.id,
+          message.timestamp
+        ));
+      });
+      playNotificationSound('/files/newmsg.mp3');
+      messageArea.scrollTop = messageArea.scrollHeight;
+    }
+  });
 }
 
-// Initialize application when page loads
-function initializeApp() {
-        
-    // Connect to Socket.IO
-    connectSocketIO();
-    
-    // Setup send button event listener
-    if (sendButton) {
-        sendButton.addEventListener('click', sendMessage);
-    }
-    
-    // Setup enter key event listener for message input
-    if (messageInputField) {
-        messageInputField.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-    }
+// ============================================================================
+// IMAGE MODAL (ZOOM / PAN / PINCH)
+// ============================================================================
 
-    if (messageArea) {
-        
-        messageArea.addEventListener('scroll', function() {
-            // Debounce the load request to handle momentum scrolling
-            scrollDebounceTimeout = setTimeout(function() {
-                if (messageArea.scrollTop <= 0) {
-                    if (!isLoadingOlderMessages && oldestMessageId) {
-                        const blankDiv = document.createElement('div');
-                        blankDiv.classList.add('message-blank');
-                        messageArea.insertBefore(blankDiv, messageArea.firstChild);
-                        const loaderDiv = document.createElement('div');
-                        loaderDiv.classList.add('loader', 'pop-in');
-                        // Slightly scroll down to show the loader
-                        messageArea.insertBefore(loaderDiv, messageArea.firstChild);
-                        const newHeight = messageArea.scrollHeight;
-                        messageArea.scrollTo({ top:  0, behavior: 'smooth'});
-                        loadOlderMessages(oldestMessageId, loaderDiv, blankDiv);
-                    }
-                }
-            }, 200);
-        });
+function openImageModal(url) {
+  const existing = document.getElementById('image-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'image-modal';
+  modal.className = 'image-modal';
+
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = 'Image';
+  img.className = 'image-modal-img';
+
+  // Error handler for 404 / missing images
+  img.addEventListener('error', async function onModalImgError() {
+    img.removeEventListener('error', onModalImgError);
+    try {
+      const res = await fetch(url, { method: 'HEAD', credentials: 'same-origin' });
+      const notice = document.createElement('div');
+      notice.className = 'modal-image-deleted';
+      notice.textContent = res.status === 404 ? 'Image deleted' : 'Image not available';
+      img.style.display = 'none';
+      modal.appendChild(notice);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    } catch (err) {
+      const notice = document.createElement('div');
+      notice.className = 'modal-image-deleted';
+      notice.textContent = 'Image not available';
+      img.style.display = 'none';
+      modal.appendChild(notice);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
     }
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'image-modal-close';
+  closeBtn.innerHTML = '✕';
+
+  modal.appendChild(img);
+  modal.appendChild(closeBtn);
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+
+  // ---- Zoom & Pan State ----
+  let scale = 1;
+  const minScale = 1;
+  const maxScale = 4;
+  let originX = 0;
+  let originY = 0;
+  let startX = 0;
+  let startY = 0;
+  let dragging = false;
+  const pointers = new Map();
+
+  // RAF batching for smooth transforms
+  let _rafId = null;
+  let _needsRender = false;
+
+  function renderTransform() {
+    _needsRender = false;
+    _rafId = null;
+    const tx = Math.round(originX * 100) / 100;
+    const ty = Math.round(originY * 100) / 100;
+    img.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
+  }
+
+  function scheduleRender() {
+    if (!_needsRender) {
+      _needsRender = true;
+      _rafId = requestAnimationFrame(renderTransform);
+    }
+  }
+
+  function clamp(v, a, b) {
+    return Math.max(a, Math.min(b, v));
+  }
+
+  // ---- Event Handlers ----
+  function onWheel(e) {
+    e.preventDefault();
+    const delta = -e.deltaY;
+    const zoomFactor = delta > 0 ? 1.1 : 0.9;
+    const rect = img.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const prevScale = scale;
+    scale = clamp(scale * zoomFactor, minScale, maxScale);
     
-    // Check and display user info
-    checkUserInfo();
+    // If zooming out to 1x, center the image
+    if (scale === 1) {
+      originX = 0;
+      originY = 0;
+    } else {
+      originX -= (px / prevScale) * (scale - prevScale);
+      originY -= (py / prevScale) * (scale - prevScale);
+    }
+    scheduleRender();
+  }
+
+  function onDblClick(e) {
+    e.preventDefault();
+    if (scale <= 1) {
+      const rect = img.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const prevScale = scale;
+      scale = 2;
+      originX -= (px / prevScale) * (scale - prevScale);
+      originY -= (py / prevScale) * (scale - prevScale);
+    } else {
+      // Zoom out to 1x: center the image
+      scale = 1;
+      originX = 0;
+      originY = 0;
+    }
+    scheduleRender();
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    img.setPointerCapture && img.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      dragging = true;
+      startX = e.clientX - originX;
+      startY = e.clientY - originY;
+    }
+  }
+
+  function onPointerMove(e) {
+    if (pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pointers.size === 1 && dragging) {
+      // Update immediately for responsive panning
+      originX = e.clientX - startX;
+      originY = e.clientY - startY;
+      const tx = Math.round(originX * 100) / 100;
+      const ty = Math.round(originY * 100) / 100;
+      img.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy);
+      if (!img._lastPinchDist) img._lastPinchDist = dist;
+      const factor = dist / img._lastPinchDist;
+      const prevScale = scale;
+      scale = clamp(scale * factor, minScale, maxScale);
+      img._lastPinchDist = dist;
+      scheduleRender();
+    }
+  }
+
+  function onPointerUp(e) {
+    pointers.delete(e.pointerId);
+    dragging = false;
+    img._lastPinchDist = null;
+  }
+
+  // ---- Close Handler ----
+  function removeModal() {
+    if (_rafId) cancelAnimationFrame(_rafId);
+    img.removeEventListener('wheel', onWheel);
+    img.removeEventListener('dblclick', onDblClick);
+    img.removeEventListener('pointerdown', onPointerDown);
+    img.removeEventListener('dragstart', (ev) => ev.preventDefault());
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    modal.removeEventListener('touchmove', (ev) => ev.preventDefault());
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onKey);
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') removeModal();
+  }
+
+  closeBtn.addEventListener('click', removeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) removeModal();
+  });
+  document.addEventListener('keydown', onKey);
+
+  // Attach listeners
+  img.addEventListener('wheel', onWheel, { passive: false });
+  img.addEventListener('dblclick', onDblClick);
+  img.addEventListener('pointerdown', onPointerDown);
+  img.addEventListener('dragstart', (ev) => ev.preventDefault());
+  modal.addEventListener('touchmove', (ev) => ev.preventDefault(), { passive: false });
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+
+  scheduleRender();
+}
+
+// ============================================================================
+// EVENT WIRING & INITIALIZATION
+// ============================================================================
+
+// Prevent native dragstart on images inside messages
+if (messageArea) {
+  messageArea.addEventListener('dragstart', (e) => {
+    if (e.target?.tagName === 'IMG' && e.target.closest('.message')) {
+      e.preventDefault();
+    }
+  });
+}
+
+// Delegate click on images to open modal
+if (messageArea) {
+  messageArea.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target?.tagName === 'IMG') {
+      const msg = target.closest('.message');
+      const avatar = target.closest('.avatar');
+      if (msg && !avatar) openImageModal(target.src);
+    }
+  });
+}
+
+// Input event listeners
+sendButton?.addEventListener('click', sendMessage);
+messageInputField?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+imageUploadInput?.addEventListener('change', uploadImage);
+
+// ============================================================================
+// SESSION & THEME MANAGEMENT
+// ============================================================================
+
+async function checkSession() {
+  try {
+    const response = await fetch('/api/check-session', {
+      method: 'GET',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    if (data.success) {
+      if (userInfo && usernameDisplay) {
+        userInfo.style.display = 'block';
+        usernameDisplay.textContent = data.data.username;
+      }
+      return true;
+    }
+    window.location.href = '/login';
+    return false;
+  } catch (error) {
+    console.error('Session check failed:', error);
+    window.location.href = '/login';
+    return false;
+  }
 }
 
 function checkUserInfo() {
-    const userInfoStored = JSON.parse(localStorage.getItem('user_info') || '{}');
-    if (userInfoStored.username && userInfo && usernameDisplay) {
-        usernameDisplay.textContent = userInfoStored.username;
-        userInfo.style.display = 'flex';
-    }
+  const userInfoStored = JSON.parse(localStorage.getItem('user_info') || '{}');
+  if (userInfoStored.username && userInfo && usernameDisplay) {
+    usernameDisplay.textContent = userInfoStored.username;
+    userInfo.style.display = 'flex';
+  }
 }
 
-// Initialize when DOM is ready
+function clearAllCookies() {
+  const cookies = document.cookie.split(';');
+  cookies.forEach((cookie) => {
+    const name = cookie.split('=')[0].trim();
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+  });
+}
+
+async function logout() {
+  try {
+    const response = await fetch('/api/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    localStorage.removeItem('user_info');
+    localStorage.removeItem('session_token');
+    sessionStorage.clear();
+    clearAllCookies();
+    if (!data.success) console.warn('Logout error:', data.message);
+    window.location.href = '/login';
+  } catch (error) {
+    localStorage.clear();
+    sessionStorage.clear();
+    clearAllCookies();
+    console.error('Logout failed:', error);
+    window.location.href = '/login';
+  }
+}
+
+logoutBtn?.addEventListener('click', logout);
+
+// Theme toggle
+if (switchThemeToggle) {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  if (savedTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+    switchThemeToggle.checked = false;
+  } else {
+    document.body.classList.remove('dark-mode');
+    switchThemeToggle.checked = true;
+  }
+
+  switchThemeToggle.addEventListener('change', () => {
+    if (switchThemeToggle.checked) {
+      document.body.classList.remove('dark-mode');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.body.classList.add('dark-mode');
+      localStorage.setItem('theme', 'dark');
+    }
+  });
+}
+
+// Load current room
+if (roomInfo && roomnameDisplay) {
+  fetch('/api/get-current-room', {
+    method: 'GET',
+    credentials: 'same-origin'
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.success && data.data) {
+        roomnameDisplay.textContent = data.data.room;
+      }
+    });
+}
+
+// ============================================================================
+// APP INITIALIZATION
+// ============================================================================
+
+function initializeApp() {
+  connectSocketIO();
+  if (messageArea) {
+    messageArea.addEventListener('scroll', function() {
+      clearTimeout(scrollDebounceTimeout);
+      scrollDebounceTimeout = setTimeout(() => {
+        if (messageArea.scrollTop <= 0) {
+          if (!isLoadingOlderMessages && oldestMessageId) {
+            const blankDiv = document.createElement('div');
+            blankDiv.classList.add('message-blank');
+            messageArea.insertBefore(blankDiv, messageArea.firstChild);
+            const loaderDiv = document.createElement('div');
+            loaderDiv.classList.add('loader', 'pop-in');
+            messageArea.insertBefore(loaderDiv, messageArea.firstChild);
+            messageArea.scrollTo({ top: 0, behavior: 'smooth' });
+            loadOlderMessages(oldestMessageId, loaderDiv, blankDiv);
+          }
+        }
+      }, 200);
+    });
+  }
+  checkUserInfo();
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeApp);
+  document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
-    initializeApp();
+  initializeApp();
 }
 
-// Scroll to the bottom of the chat on initial load and check session
 window.addEventListener('load', async () => {
-    const isLoggedIn = await checkSession();
-    if (isLoggedIn && messageArea) {
-        messageArea.scrollTop = messageArea.scrollHeight;
-    }
-})
+  const isLoggedIn = await checkSession();
+  if (isLoggedIn && messageArea) {
+    messageArea.scrollTop = messageArea.scrollHeight;
+  }
+});

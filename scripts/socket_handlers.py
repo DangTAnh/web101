@@ -10,8 +10,6 @@ _ME = "dtanh"
 
 def handle_connect(request, socketio):
     """Handle client connection"""
-    print(f"Client connected: {request.sid}")
-    
     try:
         user_id = session.get('user_id')
         room_id = get_room(user_id)
@@ -26,8 +24,6 @@ def handle_connect(request, socketio):
 
 def handle_disconnect(request):
     """Handle client disconnection"""
-    print(f"Client disconnected: {request.sid}")
-    
     try:
         user_id = session.get('user_id')
         room_id = get_room(user_id)

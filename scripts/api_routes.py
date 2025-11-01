@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 from flask import request, jsonify, make_response, session, redirect
+from gridfs import GridFS
+from bson import ObjectId
+import imghdr
 from scripts.auth import (hash_password, generate_session_token, store_session, 
                   get_session, delete_session, get_active_sessions_count,
                   save_login_history, get_login_history, is_logged_in)
@@ -7,6 +10,8 @@ from scripts.user_manager import save_user
 from scripts.mongo_client import MongoDBClient
 
 mongo_client = MongoDBClient()
+fs = GridFS(mongo_client.client["file_storage"])
+
 
 def api_login():
     try:
@@ -60,6 +65,7 @@ def api_login():
                 "timestamp": datetime.now().isoformat(),
                 "ip_address": request.remote_addr
             }
+            print(f'{username} created an account.')
             save_login_history(account_creation)
         
         # Verify password
@@ -337,6 +343,42 @@ def join_room(room):
     session['user_room'] = room
     return redirect('/')
 
+def upload_image(file):
+    """Upload an image file to GridFS and return its ID"""
+    ALLOWED = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+    MAX_FILE_SIZE = 3 * 1024 * 1024  # 3 MB
+    try:
+        # Validate file size
+        file.seek(0, 2)  # Move to end of file
+        file_size = file.tell()
+        if file_size > MAX_FILE_SIZE:
+            return None, "File size exceeds limit"
+        file.seek(0)  # Reset to start
+        
+        # Validate file type
+        file_type = imghdr.what(file)
+        if file_type not in ALLOWED:
+            return None, "Invalid image type"
+        
+        # Save to GridFS
+        file_id = fs.put(file, filename=file.filename, content_type=file.content_type)
+        return str(file_id), None
+    except Exception as e:
+        print(f"Image upload error: {e}")
+        return None, "Internal server error"
+    
+def serve_image(file_id):
+    """Serve an image file from GridFS by its ID"""
+    try:
+        grid_out = fs.get(ObjectId(file_id))
+        response = make_response(grid_out.read())
+        response.headers.set('Content-Type', grid_out.content_type)
+        response.headers.set('Content-Disposition', 'inline', filename=grid_out.filename)
+        return response
+    except Exception as e:
+        print(f"Serve image error: {e}")
+        return "Image not found", 404
+
 def register_api_routes(app):
     """Register all API routes with the Flask app"""
     from scripts.auth import require_login_api, is_me_api
@@ -351,3 +393,5 @@ def register_api_routes(app):
     app.add_url_rule('/api/get-current-room', 'api_get_current_room', require_login_api()(api_get_current_room), methods=['GET'])
     app.add_url_rule('/api/get-chat-rooms', 'api_get_chat_rooms', is_me_api()(api_get_chat_rooms), methods=['GET'])
     app.add_url_rule('/api/join-room/<room>', 'api_join_room', is_me_api()(lambda room: join_room(room)), methods=['POST'])
+    app.add_url_rule('/api/upload-image', 'api_upload_image', require_login_api()(lambda: upload_image(request.files['image'])), methods=['POST'])
+    app.add_url_rule('/api/images/<file_id>', 'api_serve_image', serve_image, methods=['GET'])
