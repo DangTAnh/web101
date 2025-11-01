@@ -3,6 +3,8 @@ from flask import request, jsonify, make_response, session, redirect
 from gridfs import GridFS
 from bson import ObjectId
 import imghdr
+from io import BytesIO
+from PIL import Image
 from scripts.auth import (hash_password, generate_session_token, store_session, 
                   get_session, delete_session, get_active_sessions_count,
                   save_login_history, get_login_history, is_logged_in)
@@ -10,7 +12,7 @@ from scripts.user_manager import save_user
 from scripts.mongo_client import MongoDBClient
 
 mongo_client = MongoDBClient()
-fs = GridFS(mongo_client.client["file_storage"])
+fs = GridFS(mongo_client.client["file_storage"], chunk_size=65536)  # 64KB chunks (better for small images)
 
 
 def api_login():
@@ -360,8 +362,23 @@ def upload_image(file):
         if file_type not in ALLOWED:
             return None, "Invalid image type"
         
+        # Compress image
+        file.seek(0)
+        img = Image.open(file)
+        
+        # Convert RGBA to RGB if needed (for JPEG compatibility)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = rgb_img
+        
+        # Compress to JPEG with quality 85
+        compressed = BytesIO()
+        img.save(compressed, format='JPEG', quality=85, optimize=True)
+        compressed.seek(0)
+        
         # Save to GridFS
-        file_id = fs.put(file, filename=file.filename, content_type=file.content_type)
+        file_id = fs.put(compressed, filename=file.filename, content_type='image/jpeg')
         return str(file_id), None
     except Exception as e:
         print(f"Image upload error: {e}")
