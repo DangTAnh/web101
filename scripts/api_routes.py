@@ -12,7 +12,7 @@ from scripts.user_manager import save_user
 from scripts.mongo_client import MongoDBClient
 
 mongo_client = MongoDBClient()
-fs = GridFS(mongo_client.client["file_storage"], chunk_size=65536)  # 64KB chunks (better for small images)
+fs = GridFS(mongo_client.client["file_storage"])
 
 
 def api_login():
@@ -377,8 +377,7 @@ def upload_image(file):
         img.save(compressed, format='JPEG', quality=85, optimize=True)
         compressed.seek(0)
         
-        # Save to GridFS
-        file_id = fs.put(compressed, filename=file.filename, content_type='image/jpeg')
+        file_id = fs.put(compressed, filename=file.filename, content_type='image/jpeg', chunk_size=65536)
         return str(file_id), None
     except Exception as e:
         print(f"Image upload error: {e}")
