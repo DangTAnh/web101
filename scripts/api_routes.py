@@ -348,7 +348,7 @@ def join_room(room):
 def upload_image(file):
     """Upload an image file to GridFS and return its ID"""
     ALLOWED = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
-    MAX_FILE_SIZE = 3 * 1024 * 1024  # 3 MB
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
     try:
         # Validate file size
         file.seek(0, 2)  # Move to end of file

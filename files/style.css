@@ -705,6 +705,12 @@ button.header-btn {
         min-height: 100svh;
         max-height: 100svh;
     }
+    .message {
+        margin-bottom: 0.3rem;
+    }
+    .message p {
+        padding: 0.5rem;
+    }
 }
 
 

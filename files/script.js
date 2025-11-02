@@ -108,7 +108,7 @@ function attachTimestampListeners(messageDiv) {
     hoverTimer = setTimeout(() => {
       showTimestampPopup(messageDiv);
       hoverTimer = null;
-    }, 2000);
+    }, 800);
   });
 
   // Mouseleave: cancel timer and hide popup
@@ -197,11 +197,23 @@ function newMessageElement(message, isOutgoing, id = null, timestamp = null) {
         skeleton.replaceWith(img);
         img.style.display = 'block';
         messageArea.scrollTop = messageArea.scrollHeight;
+        
+        // Remove the uploading system message
+        const uploadingMsg = messageArea.querySelector('[data-uploading="true"]');
+        if (uploadingMsg) {
+          uploadingMsg.remove();
+        }
       }
     });
 
     // Attach error handler to image
-    attachImageHandlers(img);
+    img.addEventListener('error', () => {
+      const skeleton = messageDiv.querySelector('.image-loading-skeleton');
+      if (skeleton) {
+        skeleton.remove(); // Remove skeleton if image fails
+      }
+      handleChatImageError(img);
+    });
 
     // Insert image after skeleton (will be replaced on load)
     messageDiv.insertBefore(img, messageDiv.firstChild);
@@ -338,6 +350,44 @@ function sendMessage() {
 // UPLOAD IMAGE
 // ============================================================================
 
+async function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDimension = 1024; // Max width/height
+        let width = img.width;
+        let height = img.height;
+
+        // Scale down if larger than maxDimension
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to JPEG with 70% quality
+        canvas.toBlob(resolve, 'image/jpeg', 0.7);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function uploadImage() {
   const file = imageUploadInput.files[0];
   if (!file) {
@@ -345,8 +395,19 @@ async function uploadImage() {
     return;
   }
 
+  // Compress image before upload
+  const compressedFile = await compressImage(file);
+
+  // Show uploading system message
+  const uploadingMsg = document.createElement('div');
+  uploadingMsg.classList.add('message', 'system');
+  uploadingMsg.setAttribute('data-uploading', 'true');
+  uploadingMsg.innerHTML = `<p><em>📤 Uploading image...</em></p>`;
+  messageArea.appendChild(uploadingMsg);
+  messageArea.scrollTop = messageArea.scrollHeight;
+
   const formData = new FormData();
-  formData.append('image', file);
+  formData.append('image', compressedFile);
 
   try {
     const response = await fetch('/api/upload-image', {
@@ -370,6 +431,8 @@ async function uploadImage() {
       } else {
         console.error('Upload: response invalid', { status: response.status, raw });
         alert('Image upload failed: server returned an unexpected response.');
+        // Remove uploading message
+        uploadingMsg.remove();
         return;
       }
     }
@@ -379,19 +442,85 @@ async function uploadImage() {
       const caption = data.data?.message || data.message || '';
       if (!imageUrl) {
         alert('Image uploaded but server did not return a URL.');
+        uploadingMsg.remove();
         return;
       }
       const messageContent = caption ? `![Image](${imageUrl})\n${caption}` : `![Image](${imageUrl})`;
       messageInputField.value = messageContent;
       const notiDiv = document.createElement('div');
+      
+      // Remove uploading message and send message
+      uploadingMsg.remove();
+      imageUploadInput.value = ''; // Clear file input
       sendMessage();
     } else {
       const errMsg = data?.message || `HTTP ${response.status}`;
       alert(`Image upload failed: ${errMsg}`);
+      uploadingMsg.remove();
     }
   } catch (error) {
     console.error('uploadImage', error);
     alert('An error occurred while uploading the image.');
+    uploadingMsg.remove();
+  }
+}
+
+// Handle pasted images from clipboard
+async function handlePastedImage(file) {
+  // Compress image before upload
+  const compressedFile = await compressImage(file);
+
+  // Show uploading system message
+  const uploadingMsg = document.createElement('div');
+  uploadingMsg.classList.add('message', 'system');
+  uploadingMsg.setAttribute('data-uploading', 'true');
+  uploadingMsg.innerHTML = `<p><em>📤 Uploading image...</em></p>`;
+  messageArea.appendChild(uploadingMsg);
+  messageArea.scrollTop = messageArea.scrollHeight;
+
+  const formData = new FormData();
+  formData.append('image', compressedFile);
+
+  try {
+    const response = await fetch('/api/upload-image', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin'
+    });
+
+    const raw = await response.text();
+    let data = null;
+
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      const trimmed = raw?.trim().replace(/^"|"$/g, '') || '';
+      const isLikelyId = /^[a-fA-F0-9]{20,64}$/.test(trimmed) || (trimmed.length > 0 && trimmed.length < 200);
+      if (response.ok && isLikelyId) {
+        const imageUrl = `/api/images/${encodeURIComponent(trimmed)}`;
+        data = { success: true, data: { image_url: imageUrl } };
+      }
+    }
+
+    if (response.ok && data?.success) {
+      const imageUrl = data.data?.image_url || data.image_url || data.url;
+      if (!imageUrl) {
+        uploadingMsg.remove();
+        return;
+      }
+      
+      const messageContent = `![Image](${imageUrl})`;
+      messageInputField.value = messageContent;
+      
+      // Remove uploading message after 1 second
+      setTimeout(() => uploadingMsg.remove(), 1000);
+      sendMessage();
+    } else {
+      uploadingMsg.remove();
+    }
+  } catch (error) {
+    console.error('handlePastedImage', error);
+    uploadingMsg.remove();
   }
 }
 
@@ -400,7 +529,14 @@ async function uploadImage() {
 // ============================================================================
 
 function connectSocketIO() {
-  socket = io();
+  socket = io({
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: Infinity,
+    pingInterval: 15000,  // Send ping every 15 seconds (like messenger)
+    pingTimeout: 10000,   // Wait 10 seconds for pong response
+  });
 
   socket.on('connect', function() {
     isConnected = true;
@@ -425,11 +561,12 @@ function connectSocketIO() {
     const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
     if (data.username !== currentUser) {
       const willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
-      const incomingMessage = document.createElement('div');
-      incomingMessage.classList.add('message', 'incoming');
-      incomingMessage.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
-      if (data.id) incomingMessage.dataset.messageId = data.id;
-      if (data.timestamp) incomingMessage.dataset.timestamp = data.timestamp;
+      const incomingMessage = newMessageElement(
+        data.message,
+        false,
+        data.id,
+        data.timestamp
+      );
       messageArea.appendChild(incomingMessage);
       if (willScroll) messageArea.scrollTop = messageArea.scrollHeight;
       playNotificationSound('/files/newmsg.mp3');
@@ -493,12 +630,14 @@ function connectSocketIO() {
     if (data.messages?.length > 0) {
       const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
       data.messages.forEach((message) => {
-        messageArea.appendChild(newMessageElement(
-          message.message,
-          message.username === currentUser,
-          message.id,
-          message.timestamp
-        ));
+        if (message.username !== currentUser) {
+          messageArea.appendChild(newMessageElement(
+            message.message,
+            message.username === currentUser,
+            message.id,
+            message.timestamp
+          ));
+        }
       });
       playNotificationSound('/files/newmsg.mp3');
       messageArea.scrollTop = messageArea.scrollHeight;
@@ -742,6 +881,25 @@ messageInputField?.addEventListener('keydown', (e) => {
     sendMessage();
   }
 });
+
+// Handle paste events - detect images in clipboard
+messageInputField?.addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  // Check for image files
+  for (let item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) {
+        handlePastedImage(file);
+      }
+      return;
+    }
+  }
+});
+
 imageUploadInput?.addEventListener('change', uploadImage);
 
 // ============================================================================
