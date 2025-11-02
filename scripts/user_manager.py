@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from scripts.mongo_client import MongoDBClient
 
 mongo_client = MongoDBClient()
