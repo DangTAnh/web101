@@ -58,9 +58,25 @@ function showTimestampPopup(messageDiv) {
   const ts = messageDiv?.dataset?.timestamp;
   if (!ts) return;
 
-  const date = new Date(ts);
+  const date = new Date(ts + "Z");
+
+  console.log('Original timestamp:', ts);
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const shortOptions = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: userTimeZone
+  };
+  
   const pad = (n) => String(n).padStart(2, '0');
-  const formatted = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const formatted = new Intl.DateTimeFormat('vi-VN', shortOptions).format(date);
+
+  console.log('Formatted timestamp:', formatted);
 
   // Remove existing popup
   const existing = document.getElementById('timestamp-popup');
@@ -295,9 +311,37 @@ function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
 
 function playNotificationSound(soundFilePath) {
   try {
-    const audio = new Audio(soundFilePath);
-    audio.volume = 0.4;
-    audio.play().catch(() => {});
+    // Try to play sound even in background using Web Audio API
+    // This works better than HTMLMediaElement in background tabs
+    fetch(soundFilePath)
+      .then(response => response.arrayBuffer())
+      .then(buffer => {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioContext.decodeAudioData(buffer, (decodedBuffer) => {
+          const source = audioContext.createBufferSource();
+          const gainNode = audioContext.createGain();
+          source.buffer = decodedBuffer;
+          source.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          gainNode.gain.value = 0.4; // 40% volume
+          source.start(0);
+        });
+      })
+      .catch(() => {
+        // Fallback to HTMLAudioElement if Web Audio fails
+        const audio = new Audio(soundFilePath);
+        audio.volume = 0.4;
+        audio.play().catch(() => {});
+      });
+    
+    // Also send browser notification if user hasn't muted
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('New Message! 💬', {
+        icon: '/files/favicon.ico',
+        tag: 'new-message',
+        requireInteraction: false
+      });
+    }
   } catch (e) {
     console.error('playNotificationSound', e);
   }
@@ -1045,5 +1089,14 @@ window.addEventListener('load', async () => {
   const isLoggedIn = await checkSession();
   if (isLoggedIn && messageArea) {
     messageArea.scrollTop = messageArea.scrollHeight;
+  }
+  
+  // Request notification permission for background notifications
+  if ('Notification' in window && Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission();
+    } catch (e) {
+      console.log('Notification permission request failed:', e);
+    }
   }
 });
