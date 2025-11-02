@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import request, jsonify, make_response, session
 from scripts.mongo_client import MongoDBClient
 
@@ -20,8 +20,8 @@ def store_session(session_token, user_data):
         'user_id': user_data.get('username'),
         'user_email': user_data.get('email'),
         'user_role': user_data.get('role', 'user'),
-        'login_time': datetime.now().isoformat(),
-        'created_at': datetime.now().isoformat()
+        'login_time': datetime.now(timezone.utc).isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat()
     })
     return True
 

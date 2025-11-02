@@ -44,7 +44,7 @@ def load_users():
                 'email': user_data['email'],
                 'role': user_data['role'],
                 'room': user_data['room'],
-                'created_at': datetime.now().isoformat()
+                'created_at': datetime.now(timezone.utc).isoformat()
             }
             mongo_client.insert_user(user_doc)
             users[username] = user_data
@@ -59,11 +59,11 @@ def save_user(username, user_data):
         'email': user_data['email'],
         'role': user_data['role'],
         'room': user_data.get('room', username),
-        'updated_at': datetime.now().isoformat()
+        'updated_at': datetime.now(timezone.utc).isoformat()
     }
     
     # Try to update existing user, insert if not found
     result = mongo_client.update_user({'username': username}, user_doc)
     if result == 0:  # No document was updated, insert new
-        user_doc['created_at'] = datetime.now().isoformat()
+        user_doc['created_at'] = datetime.now(timezone.utc).isoformat()
         mongo_client.insert_user(user_doc)

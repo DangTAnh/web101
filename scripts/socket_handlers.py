@@ -47,7 +47,7 @@ def handle_send_message(data, socketio):
             return
         
         username = data.get('username', 'Unknown')
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         
         # Create message object
         message_data = {

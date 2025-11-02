@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import request, jsonify, make_response, session, redirect
 from gridfs import GridFS
 from bson import ObjectId
@@ -64,7 +64,7 @@ def api_login():
             account_creation = {
                 "username": username,
                 "status": "created",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "ip_address": request.remote_addr
             }
             print(f'{username} created an account.')
@@ -78,7 +78,7 @@ def api_login():
                 "username": username,
                 "status": "failed",
                 "reason": "invalid_password",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "ip_address": request.remote_addr
             }
             save_login_history(failed_login)
@@ -95,7 +95,7 @@ def api_login():
         login_record = {
             "username": username,
             "status": "success",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "ip_address": request.remote_addr,
             "session_token": session_token,
             "email": users[username]["email"],
@@ -115,7 +115,7 @@ def api_login():
         session['user_email'] = users[username]["email"]
         session['user_role'] = users[username]["role"]
         session['session_token'] = session_token
-        session['login_time'] = datetime.now().isoformat()
+        session['login_time'] = datetime.now(timezone.utc).isoformat()
         
         # Create response with additional cookie settings
         response_data = {
@@ -166,7 +166,7 @@ def api_logout():
                 "username": username,
                 "session_token": session_token,
                 "status": "logout",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "ip_address": request.remote_addr
             }
             save_login_history(logout_record)

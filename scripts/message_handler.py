@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from scripts.mongo_client import MongoDBClient
 
@@ -25,7 +25,7 @@ def cache_message(message_data, user_id=None):
     if user_id is None:
         raise ValueError("user_id must be provided to cache messages")
     # Add timestamp to message
-    message_data['timestamp'] = datetime.now().isoformat()
+    message_data['timestamp'] = datetime.now(timezone.utc).isoformat()
     result = mongo_client.insert_message(user_id, message_data)
     return True
 
