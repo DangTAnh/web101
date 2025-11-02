@@ -18,7 +18,13 @@ from scripts.api_routes import register_api_routes
 # Flask and SocketIO setup
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    ping_timeout=10,      # Server waits 10 seconds for client pong
+    ping_interval=15,     # Server sends ping every 15 seconds
+    max_http_buffer_size=1e6  # 1MB for image uploads
+)
 
 # Session configuration
 app.config['SESSION_COOKIE_SECURE'] = True  # Ensures cookies are sent over HTTPS
