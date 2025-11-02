@@ -17,7 +17,20 @@ if not username or not password:
 uri = f"mongodb+srv://{username}:{password}@{cluster}.mongodb.net/?retryWrites=true&w=majority&appName={appname}"
 
 class MongoDBClient:
+    """Singleton MongoDB client - only one instance per application"""
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(MongoDBClient, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
+        # Only initialize once
+        if MongoDBClient._initialized:
+            return
+        
         self.client = MongoClient(uri, server_api=ServerApi('1'))
         try:
             self.client.admin.command('ping')
@@ -29,6 +42,8 @@ class MongoDBClient:
         self.sessions_collection = self.user_db["sessions"]
         self.login_history_collection = self.user_db["login_history"]
         self.message_db = self.client["messages"]
+        
+        MongoDBClient._initialized = True
 
     def insert_user(self, user_data):
         result = self.user_collection.insert_one(user_data)
