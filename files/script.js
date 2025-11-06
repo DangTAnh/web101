@@ -58,7 +58,7 @@ function showTimestampPopup(messageDiv) {
   const ts = messageDiv?.dataset?.timestamp;
   if (!ts) return;
 
-  const date = new Date(ts + "Z");
+  const date = new Date(ts);
 
   console.log('Original timestamp:', ts);
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -176,6 +176,69 @@ function attachImageHandlers(img) {
 }
 
 // ============================================================================
+// MESSAGE SPACING HELPER
+// ============================================================================
+
+function applyMessageSpacing(messageDiv) {
+  // Robust spacing: decide for the given message whether it should have
+  // the 'consecutive-same-type' class by checking both previous and next
+  // messages (handles older messages inserted at the top).
+  const THRESHOLD_MINUTES = 1; // within 1 minute -> grouped
+
+  function shouldBeClose(div) {
+    if (!div) return false;
+    const allMessages = Array.from(messageArea.querySelectorAll('.message:not(.system)'));
+    const idx = allMessages.indexOf(div);
+    if (idx === -1) return false;
+    const currIsOutgoing = div.classList.contains('outgoing');
+    const currTs = div.dataset.timestamp;
+
+    // helper to check timestamp closeness
+    const withinThreshold = (aTs, bTs) => {
+      if (!aTs || !bTs) return false; // unknown timestamps -> don't group
+      const a = new Date(aTs);
+      const b = new Date(bTs);
+      const diffMin = Math.abs(b - a) / (1000 * 60);
+      return diffMin <= THRESHOLD_MINUTES;
+    };
+
+    // Check previous
+    if (idx > 0) {
+      const prev = allMessages[idx - 1];
+      if (prev.classList.contains('outgoing') === currIsOutgoing) {
+        if (withinThreshold(prev.dataset.timestamp, currTs)) return true;
+      }
+    }
+
+    // Check next (important when inserting older messages at top)
+    if (idx < allMessages.length - 1) {
+      const next = allMessages[idx + 1];
+      if (next.classList.contains('outgoing') === currIsOutgoing) {
+        if (withinThreshold(currTs, next.dataset.timestamp)) return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Update spacing for the message and its neighbours to keep classes consistent
+  const allMessages = Array.from(messageArea.querySelectorAll('.message:not(.system)'));
+  const index = allMessages.indexOf(messageDiv);
+  if (index === -1) return;
+
+  const toUpdate = new Set();
+  toUpdate.add(messageDiv);
+  if (index > 0) toUpdate.add(allMessages[index - 1]);
+  if (index < allMessages.length - 1) toUpdate.add(allMessages[index + 1]);
+
+  toUpdate.forEach((el) => {
+    if (!el) return;
+    if (shouldBeClose(el)) el.classList.add('consecutive-same-type');
+    else el.classList.remove('consecutive-same-type');
+  });
+}
+
+// ============================================================================
 // MESSAGE ELEMENT BUILDER
 // ============================================================================
 
@@ -212,8 +275,8 @@ function newMessageElement(message, isOutgoing, id = null, timestamp = null) {
       if (skeleton) {
         skeleton.replaceWith(img);
         img.style.display = 'block';
-        messageArea.scrollTop = messageArea.scrollHeight;
-        
+        // Scroll down image height - skeleton height
+        messageArea.scrollTop += img.height - skeleton.offsetHeight; 
         // Remove the uploading system message
         const uploadingMsg = messageArea.querySelector('[data-uploading="true"]');
         if (uploadingMsg) {
@@ -242,7 +305,11 @@ function newMessageElement(message, isOutgoing, id = null, timestamp = null) {
   if (timestamp) messageDiv.dataset.timestamp = timestamp;
 
   // Track newest message ID
-  newestMessageId = id || messageDiv.dataset.messageId || newestMessageId;
+  if (timestamp) {
+    if (!newestMessageId || new Date(timestamp) > new Date(newestMessageId)) {
+      newestMessageId = id || newestMessageId;
+    }
+  }
 
   // Attach timestamp listener (hover + click fallback)
   attachTimestampListeners(messageDiv);
@@ -273,6 +340,7 @@ function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
             message.timestamp
           );
           messageArea.insertBefore(messageElement, messageArea.firstChild);
+          applyMessageSpacing(messageElement);
         });
         oldestMessageId = data.messages[data.messages.length - 1].id || oldestMessageId;
       }
@@ -287,7 +355,6 @@ function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
         setTimeout(() => loaderDiv.parentNode?.removeChild(loaderDiv), 300);
       }
 
-      messageArea.scrollTo({ top: 40 * data.messages.length, behavior: 'auto' });
       isLoadingOlderMessages = false;
     }, 500);
   });
@@ -311,31 +378,38 @@ function loadOlderMessages(beforeMessageId, loaderDiv, blankDiv) {
 
 function playNotificationSound(soundFilePath) {
   try {
-    // Try to play sound even in background using Web Audio API
-    // This works better than HTMLMediaElement in background tabs
-    fetch(soundFilePath)
-      .then(response => response.arrayBuffer())
-      .then(buffer => {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioContext.decodeAudioData(buffer, (decodedBuffer) => {
-          const source = audioContext.createBufferSource();
-          const gainNode = audioContext.createGain();
-          source.buffer = decodedBuffer;
-          source.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          gainNode.gain.value = 0.4; // 40% volume
-          source.start(0);
-        });
-      })
-      .catch(() => {
-        // Fallback to HTMLAudioElement if Web Audio fails
-        const audio = new Audio(soundFilePath);
-        audio.volume = 0.4;
-        audio.play().catch(() => {});
-      });
+    // Check if sound is enabled
+    const soundEnabled = localStorage.getItem('sound_enabled') !== 'false';
+    const notificationsEnabled = localStorage.getItem('notifications_enabled') !== 'false';
     
-    // Also send browser notification if user hasn't muted
-    if ('Notification' in window && Notification.permission === 'granted') {
+    // Play sound if enabled
+    if (soundEnabled) {
+      // Try to play sound even in background using Web Audio API
+      // This works better than HTMLMediaElement in background tabs
+      fetch(soundFilePath)
+        .then(response => response.arrayBuffer())
+        .then(buffer => {
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          audioContext.decodeAudioData(buffer, (decodedBuffer) => {
+            const source = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            source.buffer = decodedBuffer;
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.value = 0.4; // 40% volume
+            source.start(0);
+          });
+        })
+        .catch(() => {
+          // Fallback to HTMLAudioElement if Web Audio fails
+          const audio = new Audio(soundFilePath);
+          audio.volume = 0.4;
+          audio.play().catch(() => {});
+        });
+    }
+    
+    // Show browser notification if enabled
+    if (notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
       new Notification('New Message! 💬', {
         icon: '/files/favicon.ico',
         tag: 'new-message',
@@ -360,17 +434,11 @@ function sendMessage() {
   }
 
   const nowTs = new Date().toISOString();
-  const outgoingMessage = newMessageElement(messageText, true, '', nowTs);
-  messageArea.appendChild(outgoingMessage);
   messageInputField.value = '';
   messageArea.scrollTop = messageArea.scrollHeight;
 
-  const userInfoStored = JSON.parse(localStorage.getItem('user_info') || '{}');
-  const username = userInfoStored.username || prompt('Enter your username:') || 'Anonymous';
-
   socket.emit('send_message', {
     message: messageText,
-    username,
     timestamp: new Date().toISOString()
   });
 
@@ -598,36 +666,42 @@ function connectSocketIO() {
       statusMessage.innerHTML = `<p><em>${data.message}</em></p>`;
       messageArea.appendChild(statusMessage);
       messageArea.scrollTop = messageArea.scrollHeight;
+      setTimeout(() => {
+        statusMessage.remove();
+      }, 1000);
     }
   });
 
   socket.on('new_message', function(data) {
     const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+    const willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
+    const incomingMessage = newMessageElement(
+      data.message,
+      data.username === currentUser,
+      data.id,
+      data.timestamp
+    );
+    messageArea.appendChild(incomingMessage);
+    applyMessageSpacing(incomingMessage);
+    if (willScroll) messageArea.scrollTop = messageArea.scrollHeight;
     if (data.username !== currentUser) {
-      const willScroll = messageArea.scrollTop - messageArea.scrollHeight + messageArea.clientHeight > -300;
-      const incomingMessage = newMessageElement(
-        data.message,
-        false,
-        data.id,
-        data.timestamp
-      );
-      messageArea.appendChild(incomingMessage);
-      if (willScroll) messageArea.scrollTop = messageArea.scrollHeight;
       playNotificationSound('/files/newmsg.mp3');
-      newestMessageId = data.id || newestMessageId;
     }
+    newestMessageId = data.id || newestMessageId;
   });
 
   socket.on('recent_messages', function(data) {
     if (data.messages?.length > 0) {
       const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
       data.messages.forEach((message) => {
-        messageArea.appendChild(newMessageElement(
+        const msgEl = newMessageElement(
           message.message,
           message.username === currentUser,
           message.id,
           message.timestamp
-        ));
+        );
+        messageArea.appendChild(msgEl);
+        applyMessageSpacing(msgEl);
       });
       messageArea.scrollTop = messageArea.scrollHeight;
       oldestMessageId = data.messages[0].id || null;
@@ -656,6 +730,9 @@ function connectSocketIO() {
     messageArea.appendChild(statusMessage);
     messageArea.scrollTop = messageArea.scrollHeight;
     setTimeout(() => {
+      statusMessage.remove();
+    }, 1000);
+    setTimeout(() => {
       if (!isConnected) socket.connect();
     }, 5000);
   });
@@ -673,19 +750,45 @@ function connectSocketIO() {
   socket.on('messages_since_reconnect', function(data) {
     if (data.messages?.length > 0) {
       const currentUser = JSON.parse(localStorage.getItem('user_info') || '{}').username;
+      let hasNewMessages = false;
       data.messages.forEach((message) => {
         if (message.username !== currentUser) {
-          messageArea.appendChild(newMessageElement(
+          const msgEl = newMessageElement(
             message.message,
             message.username === currentUser,
             message.id,
             message.timestamp
-          ));
+          );
+          messageArea.appendChild(msgEl);
+          applyMessageSpacing(msgEl);
+          hasNewMessages = true;
         }
+        // Update newestMessageId with all messages (not just incoming)
+        newestMessageId = message.id || newestMessageId;
       });
-      playNotificationSound('/files/newmsg.mp3');
+      if (hasNewMessages) {
+        playNotificationSound('/files/newmsg.mp3');
+      }
       messageArea.scrollTop = messageArea.scrollHeight;
     }
+  });
+
+  // Listen for nickname changes from other users
+  socket.on('nickname_changed', function(data) {
+    console.log('Nickname changed:', data);
+    
+    // Fetch updated nicknames from server
+    updateDisplayedNicknames();
+    
+    // Update input fields if modal is open
+    if (nicknameModal && !nicknameModal.classList.contains('hidden')) {
+      loadNicknames();
+    }
+  });
+
+  // Listen for nickname broadcast success confirmation
+  socket.on('nickname_broadcast_success', function(data) {
+    console.log('Nickname broadcast successful:', data);
   });
 }
 
@@ -961,6 +1064,8 @@ async function checkSession() {
       if (userInfo && usernameDisplay) {
         userInfo.style.display = 'block';
         usernameDisplay.textContent = data.data.username;
+        const tobeRestored = { username: data.data.username, email: data.data.email, role: data.data.role};
+        localStorage.setItem('user_info', JSON.stringify(tobeRestored));
       }
       return true;
     }
@@ -1077,6 +1182,115 @@ function initializeApp() {
     });
   }
   checkUserInfo();
+  setupMobileDropdown();
+}
+
+// ============================================================================
+// MOBILE DROPDOWN MENU HANDLERS
+// ============================================================================
+
+function setupMobileDropdown() {
+  const hamburgerBtn = document.getElementById('hamburger-btn');
+  const mobileDropdown = document.getElementById('mobile-header-dropdown');
+  const mobileOverlay = document.getElementById('mobile-dropdown-overlay');
+  const closeDropdownBtn = document.getElementById('close-dropdown-btn');
+  const mobileSettingsBtn = document.getElementById('mobile-settings-btn');
+  const mobileNicknameBtn = document.getElementById('mobile-nickname-btn');
+  const mobileLogoutBtn = document.getElementById('mobile-logout-btn');
+  const mobileChangeRoomBtn = document.getElementById('mobile-change-room-btn');
+
+  function openMobileDropdown() {
+    if (mobileDropdown && mobileOverlay) {
+      // Update mobile dropdown with current user info
+      updateMobileDropdownInfo();
+      
+      mobileDropdown.classList.add('open');
+      mobileOverlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function closeMobileDropdown() {
+    if (mobileDropdown && mobileOverlay) {
+      mobileDropdown.classList.remove('open');
+      mobileOverlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  }
+
+  function updateMobileDropdownInfo() {
+    const usernameDisplay = document.getElementById('username-display');
+    const mobileUsernameDisplay = document.getElementById('mobile-username-display');
+
+    if (usernameDisplay && mobileUsernameDisplay) {
+      mobileUsernameDisplay.textContent = usernameDisplay.textContent;
+    }
+  }
+
+  // Open dropdown
+  if (hamburgerBtn) {
+    hamburgerBtn.addEventListener('click', openMobileDropdown);
+  }
+
+  // Close dropdown
+  if (closeDropdownBtn) {
+    closeDropdownBtn.addEventListener('click', closeMobileDropdown);
+  }
+
+  if (mobileOverlay) {
+    mobileOverlay.addEventListener('click', closeMobileDropdown);
+  }
+
+  // Mobile action buttons
+  if (mobileSettingsBtn) {
+    mobileSettingsBtn.addEventListener('click', () => {
+      closeMobileDropdown();
+      if (settingsPopup) {
+        settingsPopup.classList.remove('hidden');
+      }
+    });
+  }
+
+  if (mobileNicknameBtn) {
+    mobileNicknameBtn.addEventListener('click', () => {
+      closeMobileDropdown();
+      loadNicknames();
+      if (nicknameModal) {
+        nicknameModal.classList.remove('hidden');
+      }
+    });
+  }
+
+  if (mobileLogoutBtn) {
+    mobileLogoutBtn.addEventListener('click', () => {
+      closeMobileDropdown();
+      logout();
+    });
+  }
+
+  if (mobileChangeRoomBtn) {
+    mobileChangeRoomBtn.addEventListener('click', () => {
+      closeMobileDropdown();
+      location.href = '/change';
+    });
+  }
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && mobileDropdown?.classList.contains('open')) {
+      closeMobileDropdown();
+    }
+  });
+}
+
+// Update mobile dropdown when nicknames change
+function updateMobileDropdownOnNicknameChange() {
+  const usernameDisplay = document.getElementById('username-display');
+  const mobileUsernameDisplay = document.getElementById('mobile-username-display');
+
+  if (usernameDisplay && mobileUsernameDisplay) {
+    mobileUsernameDisplay.textContent = usernameDisplay.textContent;
+  }
 }
 
 if (document.readyState === 'loading') {
@@ -1100,3 +1314,210 @@ window.addEventListener('load', async () => {
     }
   }
 });
+
+// ============================================================================
+// SETTINGS POPUP HANDLERS
+// ============================================================================
+
+const settingsPopup = document.getElementById('settings-popup');
+const roomSettingsBtn = document.getElementById('room-settings-btn');
+const closeSettingsBtn = document.getElementById('close-settings');
+
+// Open settings popup
+if (roomSettingsBtn) {
+  roomSettingsBtn.addEventListener('click', () => {
+    if (settingsPopup) {
+      settingsPopup.classList.remove('hidden');
+    }
+  });
+}
+
+// Close settings popup
+if (closeSettingsBtn) {
+  closeSettingsBtn.addEventListener('click', () => {
+    if (settingsPopup) {
+      settingsPopup.classList.add('hidden');
+    }
+  });
+}
+
+// Close popup when clicking outside
+if (settingsPopup) {
+  settingsPopup.addEventListener('click', (e) => {
+    if (e.target === settingsPopup) {
+      settingsPopup.classList.add('hidden');
+    }
+  });
+  
+  // Close popup with Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !settingsPopup.classList.contains('hidden')) {
+      settingsPopup.classList.add('hidden');
+    }
+  });
+}
+
+// ============================================================================
+// NICKNAME EDITOR MODAL HANDLERS
+// ============================================================================
+
+const nicknameModal = document.getElementById('nickname-modal');
+const editNicknamesBtn = document.getElementById('edit-nicknames-btn');
+const closeNicknameBtn = document.getElementById('close-nickname-modal');
+const cancelNicknameBtn = document.getElementById('cancel-nickname-btn');
+const saveNicknameBtn = document.getElementById('save-nickname-btn');
+const myNicknameInput = document.getElementById('my-nickname-input');
+const theirNicknameInput = document.getElementById('their-nickname-input');
+
+// Load nicknames from API
+async function loadNicknames() {
+  try {
+    const response = await fetch('/api/get-nicknames', {
+      method: 'GET',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      const myNickname = data.data.me_nickname || '';
+      const theirNickname = data.data.their_nickname || '';
+      
+      // Get original usernames for placeholders
+      const usernameDisplay = document.getElementById('username-display');
+      const roomnameDisplay = document.getElementById('roomname-display');
+      
+      const originalUsername = usernameDisplay?.getAttribute('data-original-username') || usernameDisplay?.textContent || '';
+      const originalRoomname = roomnameDisplay?.getAttribute('data-original-roomname') || roomnameDisplay?.textContent || '';
+    }
+  } catch (error) {
+    console.error('Failed to load nicknames:', error);
+  }
+}
+
+// Save nicknames via API then notify via Socket.IO
+async function saveNicknames() {
+  const myNickname = myNicknameInput?.value.trim() || '';
+  const theirNickname = theirNicknameInput?.value.trim() || '';
+  
+  try {
+    // First, save to database via API
+    const response = await fetch('/api/change-nickname', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        me_nickname: myNickname,
+        their_nickname: theirNickname
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // After successful save, notify server via Socket.IO to broadcast change
+      if (socket && socket.connected) {
+        socket.emit('nickname_changed_notify', {
+          me_nickname: myNickname,
+          their_nickname: theirNickname
+        });
+      }
+      
+      // Update displayed usernames locally
+      updateDisplayedNicknames();
+    } else {
+      console.error('Failed to save nicknames:', data.message);
+      alert('Failed to save nicknames: ' + data.message);
+    }
+  } catch (error) {
+    console.error('Error saving nicknames:', error);
+    alert('Error saving nicknames. Please try again.');
+  }
+}
+
+// Update the displayed usernames with nicknames from API
+async function updateDisplayedNicknames() {
+  try {
+    const response = await fetch('/api/get-nicknames', {
+      method: 'GET',
+      credentials: 'same-origin'
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      const myNickname = data.data.me_nickname || '';
+      const theirNickname = data.data.their_nickname || '';
+      
+      // Update roomname display in header
+      const roomnameDisplay = document.getElementById('roomname-display');
+      if (roomnameDisplay) {
+        const originalRoomname = roomnameDisplay.getAttribute('data-original-roomname') || roomnameDisplay.textContent;
+        if (!roomnameDisplay.getAttribute('data-original-roomname')) {
+          roomnameDisplay.setAttribute('data-original-roomname', originalRoomname);
+        }
+        roomnameDisplay.textContent = theirNickname || originalRoomname;
+      }
+      
+      // Update mobile dropdown displays
+      updateMobileDropdownOnNicknameChange();
+    }
+  } catch (error) {
+    console.error('Failed to update nicknames:', error);
+  }
+}
+
+// Open nickname modal
+if (editNicknamesBtn) {
+  editNicknamesBtn.addEventListener('click', () => {
+    loadNicknames();
+    if (nicknameModal) {
+      nicknameModal.classList.remove('hidden');
+    }
+  });
+}
+
+// Close nickname modal
+function closeNicknameModal() {
+  if (nicknameModal) {
+    nicknameModal.classList.add('hidden');
+  }
+}
+
+if (closeNicknameBtn) {
+  closeNicknameBtn.addEventListener('click', closeNicknameModal);
+}
+
+if (cancelNicknameBtn) {
+  cancelNicknameBtn.addEventListener('click', closeNicknameModal);
+}
+
+// Save nicknames
+if (saveNicknameBtn) {
+  saveNicknameBtn.addEventListener('click', () => {
+    saveNicknames();
+    closeNicknameModal();
+  });
+}
+
+// Close modal when clicking outside
+if (nicknameModal) {
+  nicknameModal.addEventListener('click', (e) => {
+    if (e.target === nicknameModal) {
+      closeNicknameModal();
+    }
+  });
+  
+  // Close modal with Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !nicknameModal.classList.contains('hidden')) {
+      closeNicknameModal();
+    }
+  });
+}
+
+// Load nicknames on page load
+document.addEventListener('DOMContentLoaded', () => {
+  updateDisplayedNicknames();
+});
+

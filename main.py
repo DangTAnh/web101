@@ -11,7 +11,7 @@ from scripts.user_manager import load_users
 from scripts.socket_handlers import (
     handle_connect, handle_disconnect, handle_send_message,
     handle_get_older_messages, handle_get_recent_messages,
-    handle_get_messages_since_reconnect
+    handle_get_messages_since_reconnect, handle_nickname_changed_notify
 )
 from scripts.api_routes import register_api_routes
 
@@ -104,6 +104,12 @@ def on_get_recent_messages():
 def on_get_messages_since_reconnect(data):
     """Get messages since last known message ID after reconnect"""
     handle_get_messages_since_reconnect(data)
+
+@socketio.on('nickname_changed_notify')
+@require_login
+def on_nickname_changed_notify(data):
+    """Broadcast nickname change to all clients"""
+    handle_nickname_changed_notify(data, socketio)
 
 def run_server():
     while True:

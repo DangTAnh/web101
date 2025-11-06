@@ -27,6 +27,11 @@
         <!-- Main Chat Window -->
         <main class="chat-window">
             <header class="chat-header">
+                <!-- Hamburger Menu Button (Mobile Only) -->
+                <button type="button" id="hamburger-btn" class="hamburger-btn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                
                 <div class="user-info" id="user-info">
                     <span id="username-display" style="font-weight: bold;"></span>
                     <button id="logout-btn" class="header-btn"><i class="fa fa-sign-out"></i></button>
@@ -50,8 +55,93 @@
                         </svg>
                     </span>
                     </label>
+                    <div class="room-setting">
+                        <button type="button" id="room-settings-btn" class="room-settings-btn"></button>
+                    </div>
                 </div>
             </header>
+            
+            <!-- Mobile Header Dropdown -->
+            <div id="mobile-dropdown-overlay" class="mobile-dropdown-overlay"></div>
+            <div id="mobile-header-dropdown" class="mobile-header-dropdown">
+                <div class="mobile-dropdown-header">
+                    <h3>Menu</h3>
+                    <button type="button" id="close-dropdown-btn" class="close-dropdown-btn">✕</button>
+                </div>
+                <div class="mobile-dropdown-content">
+                    <div class="mobile-user-info">
+                        <div class="label">Người dùng</div>
+                        <div class="value" id="mobile-username-display"></div>
+                    </div>
+                    <div class="mobile-actions">
+                        <button type="button" id="mobile-settings-btn" class="mobile-action-btn">
+                            <i class="fas fa-cog"></i>
+                            <span>Cài đặt cuộc trò chuyện</span>
+                        </button>
+                        <button type="button" id="mobile-nickname-btn" class="mobile-action-btn">
+                            <i class="fas fa-edit"></i>
+                            <span>Chỉnh sửa biệt danh</span>
+                        </button>
+                        <button type="button" id="mobile-logout-btn" class="mobile-action-btn logout">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Đăng xuất</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings Popup Modal -->
+            <div id="settings-popup" class="settings-popup hidden">
+                <div class="settings-popup-content">
+                    <div class="settings-popup-header">
+                        <h3>Cài đặt cuộc trò chuyện</h3>
+                        <button type="button" id="close-settings" class="close-settings-btn">✕</button>
+                    </div>
+                    <div class="settings-popup-body">
+                        <div class="setting-item">
+                            <label for="notification-toggle">Cool button!</label>
+                            <input type="checkbox" id="notification-toggle" checked>
+                        </div>
+                        <div class="setting-item">
+                            <label>Theme</label>
+                            <div class="theme-preview">
+                                <span>To be implemented</span>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label>Biệt danh</label>
+                            <button type="button" id="edit-nicknames-btn" class="edit-nicknames-btn">
+                                <i class="fas fa-edit"></i> Chỉnh sửa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Nickname Editor Modal -->
+            <div id="nickname-modal" class="nickname-modal hidden">
+                <div class="nickname-modal-content">
+                    <div class="nickname-modal-header">
+                        <h3>Chỉnh sửa biệt danh</h3>
+                        <button type="button" id="close-nickname-modal" class="close-nickname-btn">✕</button>
+                    </div>
+                    <div class="nickname-modal-body">
+                        <div class="nickname-input-group">
+                            <label for="my-nickname-input">Biệt danh của bạn:</label>
+                            <input type="text" id="my-nickname-input" placeholder="Nhập biệt danh của bạn" maxlength="30">
+                        </div>
+                        <div class="nickname-input-group">
+                            <label for="their-nickname-input">Biệt danh của người kia:</label>
+                            <input type="text" id="their-nickname-input" placeholder="Nhập biệt danh của người kia" maxlength="30">
+                        </div>
+                    </div>
+                    <div class="nickname-modal-footer">
+                        <button type="button" id="cancel-nickname-btn" class="nickname-btn cancel-btn">Hủy</button>
+                        <button type="button" id="save-nickname-btn" class="nickname-btn save-btn">Lưu</button>
+                    </div>
+                </div>
+            </div>
+            
             <div class="message-area" id="message-area">
                 <!-- Messages will be dynamically added here by JavaScript -->
             </div>

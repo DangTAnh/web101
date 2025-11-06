@@ -56,6 +56,26 @@ class MongoDBClient:
         result = self.user_collection.update_one(query, {'$set': update_data})
         return result.modified_count
 
+    def change_me_nickname(self, user_id, new_nickname):
+        result = self.user_collection.update_one(
+            {'username': user_id},
+            {'$set': {'me_nickname': new_nickname}}
+        )
+        return result.modified_count
+    
+    def change_their_nickname(self, user_id, new_nickname):
+        result = self.user_collection.update_one(
+            {'username': user_id},
+            {'$set': {'their_nickname': new_nickname}}
+        )
+        return result.modified_count
+    
+    def get_nicknames(self, user_id):
+        user = self.user_collection.find_one({'username': user_id}, {'me_nickname': 1, 'their_nickname': 1})
+        if user:
+            return user.get('me_nickname', ''), user.get('their_nickname', '')
+        return None, None
+
     def delete_user(self, query):
         result = self.user_collection.delete_one(query)
         return result.deleted_count

@@ -46,7 +46,7 @@ def handle_send_message(data, socketio):
             emit('error', {'message': 'Message cannot be empty'})
             return
         
-        username = data.get('username', 'Unknown')
+        username = session.get('user_id')
         timestamp = datetime.now(timezone.utc).isoformat()
         
         # Create message object
@@ -91,7 +91,7 @@ def handle_get_older_messages(data):
             return
         
         room = get_room(session.get('user_id'))
-        older_messages = get_messages_before(room, before_message_id, 10)
+        older_messages = get_messages_before(room, before_message_id, 50)
         
         emit('older_messages', {
             'messages': sanitize_for_json(older_messages),
@@ -119,7 +119,6 @@ def handle_get_recent_messages():
 def handle_get_messages_since_reconnect(data):
     """Get messages since last known message ID after reconnect"""
     try:
-        print(data)
         last_message_id = data.get('last_message_id')
         if not last_message_id:
             emit('error', {'message': 'last_message_id required'})
@@ -180,3 +179,37 @@ def handle_join_room(data):
     except Exception as e:
         print(f"Socket.IO join room error: {e}")
         emit('error', {'message': 'Failed to join room'})
+
+def handle_nickname_changed_notify(data, socketio):
+    """Broadcast nickname change notification to all clients in the room"""
+    try:
+        me_nickname = data.get('me_nickname', '').strip()
+        their_nickname = data.get('their_nickname', '').strip()
+        
+        username = session.get('user_id')
+        room = get_room(username)
+        
+        # Prepare notification data
+        nickname_data = {
+            'me_nickname': me_nickname,
+            'their_nickname': their_nickname,
+            'changed_by': username
+        }
+        
+        # Broadcast to current user's room
+        socketio.emit('nickname_changed', nickname_data, room=room)
+        
+        # If user is not _ME, also emit to _ME's room
+        if username != _ME:
+            socketio.emit('nickname_changed', nickname_data, room=_ME)
+        
+        # Send confirmation to sender
+        emit('nickname_broadcast_success', {
+            'success': True,
+            'me_nickname': me_nickname,
+            'their_nickname': their_nickname
+        })
+        
+    except Exception as e:
+        print(f"Socket.IO broadcast nickname error: {e}")
+        emit('error', {'message': 'Failed to broadcast nickname change'})

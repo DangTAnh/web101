@@ -290,22 +290,14 @@ def api_get_current_room():
         return jsonify({
             "success": True,
             "data": {
-                "room": "dtanh"
+                "room": mongo_client.user_collection.find_one({'username': username}).get('me_nickname', "DTAnh")
             }
         }), 200
-    from scripts.user_manager import load_users
-    users = load_users()
-    user_data = users.get(username)
-    if not user_data:
-        return jsonify({
-            "success": False,
-            "message": "User data not found"
-        }), 404
-    room = user_data.get('room', username)
+    room = mongo_client.user_collection.find_one({'username': username}).get('room')
     return jsonify({
         "success": True,
         "data": {
-            "room": room
+            "room": mongo_client.user_collection.find_one({'username': room}).get('their_nickname', room)
         }
     }), 200
     
@@ -344,6 +336,65 @@ def join_room(room):
     )
     session['user_room'] = room
     return redirect('/')
+
+def api_change_nickname(new_me_nickname, new_their_nickname):
+    """Change user's nickname"""
+    if not is_logged_in():
+        return jsonify({
+            "success": False,
+            "message": "Not logged in"
+        }), 401
+    username = session.get('user_id')
+    try:
+        # Update nicknames in MongoDB
+        if username == 'dtanh':
+            room = mongo_client.user_collection.find_one({'username': username}).get('room', username)
+            username = room
+        mongo_client.change_me_nickname(username, new_me_nickname)
+        mongo_client.change_their_nickname(username, new_their_nickname)
+
+        return jsonify({
+            "success": True,
+            "message": "Nickname changed successfully"
+        }), 200
+    except Exception as e:
+        print(f"Change nickname error: {e}")
+        return jsonify({
+            "success": False,
+            "message": "Internal server error"
+        }), 500
+        
+def api_get_nicknames():
+    """Get user's nicknames"""
+    if not is_logged_in():
+        return jsonify({
+            "success": False,
+            "message": "Not logged in"
+        }), 401
+    username = session.get('user_id')
+    try:
+        room=None
+        if username == 'dtanh':
+            room = mongo_client.user_collection.find_one({'username': username}).get('room', username)
+            username = room
+        me_nickname, their_nickname = mongo_client.get_nicknames(username)
+        if me_nickname is None or me_nickname.strip() == "":
+            me_nickname = 'dtanh'
+        if their_nickname is None or their_nickname.strip() == "":
+            their_nickname = username
+        return jsonify({
+            "success": True,
+            "data": {
+                "me_nickname": me_nickname if room else their_nickname,
+                "their_nickname": their_nickname if room else me_nickname
+            }
+        }), 200
+    except Exception as e:
+        print(f"Get nicknames error: {e}")
+        return jsonify({
+            "success": False,
+            "message": "Internal server error"
+        }), 500
 
 def upload_image(file):
     """Upload an image file to GridFS and return its ID"""
@@ -411,3 +462,8 @@ def register_api_routes(app):
     app.add_url_rule('/api/join-room/<room>', 'api_join_room', is_me_api()(lambda room: join_room(room)), methods=['POST'])
     app.add_url_rule('/api/upload-image', 'api_upload_image', require_login_api()(lambda: upload_image(request.files['image'])), methods=['POST'])
     app.add_url_rule('/api/images/<file_id>', 'api_serve_image', serve_image, methods=['GET'])
+    app.add_url_rule('/api/change-nickname', 'api_change_nickname', require_login_api()(lambda: api_change_nickname(
+        request.json.get('me_nickname'),
+        request.json.get('their_nickname')
+    )), methods=['POST'])
+    app.add_url_rule('/api/get-nicknames', 'api_get_nicknames', require_login_api()(api_get_nicknames), methods=['GET'])
